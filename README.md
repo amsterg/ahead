@@ -3,7 +3,7 @@ ahead
 
 A short description of the project.
 
-* Exploration and modelling of AtariHead dataset for Inverse Reinforcement Learning
+* Exploration and modelling of [AtariHead](https://zenodo.org/record/2603190) dataset for Inverse Reinforcement Learning
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
