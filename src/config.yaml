@@ -1,0 +1,4 @@
+#PATHS
+
+raw_data_dir : 'data/raw/'
+proc_data_dir : 'data/processed/'
