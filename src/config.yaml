@@ -2,3 +2,7 @@
 
 raw_data_dir : 'data/raw/'
 proc_data_dir : 'data/processed/'
+interim_data_dir : 'data/interim/'
+valid_actions : {
+  'breakout': [3,4]
+}
