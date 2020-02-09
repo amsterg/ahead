@@ -39,6 +39,10 @@ def get_game_entries_(game_dir):
             game_runs.append(entry.split('.txt')[0])
             game_runs_dirs.append(game_dir)
             game_runs_gaze.append(entry)
+        elif entry.__contains__('.csv'):
+            game_runs.append(entry.split('_gaze_data.csv')[0])
+            game_runs_dirs.append(game_dir)
+            game_runs_gaze.append(entry)
 
     return game_runs, game_runs_dirs, game_runs_gaze
 
@@ -71,7 +75,7 @@ def process_gaze_data(gaze_file, gaze_out_file):
                 tstep_[1:] = game_run_data_mod[-1][1:len(header) - 1]
 
                 assert len(tstep_) == len(header) - 1, print(tstep_, header,
-                                                         len(tstep_), len(header))
+                                                             len(tstep_), len(header))
 
         gaze_data = tstep[len(header) - 1:]
         if len(gaze_data) == 1 and gaze_data[0] == 'null':
@@ -103,7 +107,7 @@ def process_gaze_data(gaze_file, gaze_out_file):
 
 
 cmp_fmt = '.tar.bz2'
-overwrite_gaze = True
+overwrite_gaze = False
 for game_run, game_run_dir, game_run_gaze in tqdm(zip(game_runs, game_runs_dirs, game_runs_gazes)):
     untar_sting = 'tar -xjf {} -C {}'.format(os.path.join(
         game_run_dir, game_run)+cmp_fmt, interim_game_dir+'/')
@@ -129,9 +133,10 @@ game_runs, game_runs_dirs, game_runs_gazes = get_game_entries_(
     interim_game_dir)
 
 
-# game_run_frames = OrderedDict({
-#     int(entry.split('_')[-1].split('.png')[0]): entry
-#     for entry in os.listdir(
-#         os.path.join(game_runs_dirs[0], game_runs[0]))
-#     if entry.__contains__('.png')
-# })
+game_run_frames = OrderedDict({
+    int(entry.split('_')[-1].split('.png')[0]): os.path.join(game_runs_dirs[0], entry)
+    for entry in os.listdir(game_runs_dirs[0])
+    if entry.__contains__('.png')
+})
+
+print(len(game_run_frames))

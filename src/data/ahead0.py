@@ -186,7 +186,7 @@ for fid in tqdm(frame_ids.index):
     ax2 = fig2.add_subplot(111)
     pdfs = []
     for gpt in gpts:
-        rv = multivariate_normal(mean=gpt,cov=2)
+        rv = multivariate_normal(mean=gpt,cov=5)
         pdfs.append(rv.pdf(pos))
         # plt.contourf(x, y, rv.pdf(pos),alpha=0.1)
         # break
