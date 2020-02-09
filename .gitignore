@@ -90,7 +90,7 @@ target/
 .mypy_cache/
 
 #trained models
-models/
+models_/
 
 #tensorboard summaries
 runs/
