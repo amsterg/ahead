@@ -6,4 +6,5 @@ interim_data_dir : 'data/interim/'
 valid_actions : {
   'breakout': [3,4]
 }
-model_save_dir : 'models/'
+model_save_dir : 'models_/'
+vis_preds_dir : 'data/vis/'

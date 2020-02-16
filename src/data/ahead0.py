@@ -32,8 +32,8 @@ game_runs = [
 ]
 
 game_run = game_runs[0]
+game_run = '198_RZ_3877709_Dec-03-16-56-11'
 print(game_run)
-game_run = '490_KM_3486399_Jul-18-16-47-55'
 game_run_frames = OrderedDict({
     int(entry.split('_')[-1].split('.png')[0]): entry
     for entry in os.listdir(
@@ -196,14 +196,14 @@ for fid in tqdm(frame_ids.index):
     # print(wpdf.shape)
     plt.contourf(x, y, wpdf)
     plt.ylim(plt.ylim()[::-1])
-
+    plt.close()
 
     
     # sns.scatterplot(x=gpts[:,0], y=gpts[:,1])
     # ax = sns.distributions.kdeplot(
     #     pd.DataFrame({'x': gpts[:, 0], 'y': gpts[:, 1]}))
     # ax.set_title(len(gpts))
-    plt.show()
+    # plt.show()
     # plt.show()
 
     # cv2.circle(frame_img_data, tuple(gpt[::-1]), 6, [255, 255, 255], 1, 16)
@@ -224,13 +224,13 @@ for fid in tqdm(frame_ids.index):
     # frame_diff = 0.4 * frame_ix + 0.6 * frame_diff
     # frame_diff = frame_diff / 255.0
 
-    cv2.imshow('Frame_diff {}'.format(fid), frame_img_data)
-    cv2.waitKey()
+    # cv2.imshow('Frame_diff {}'.format(fid), frame_img_data)
+    # cv2.waitKey()
 
     # cv2.imshow('Frame_sum {}'.format(fid), frame_sum_ot)
     # cv2.waitKey()
-    # cv2.imwrite(os.path.join(img_writ_dir, game_run_frames[fid + 1]),
-    #             frame_img_data)
+    cv2.imwrite(os.path.join(img_writ_dir, game_run_frames[fid + 1]),
+                frame_img_data)
 
     # if frame_diff is not None:
     #     cv2.imwrite(

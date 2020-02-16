@@ -11,7 +11,7 @@ import os
 import pandas as pd
 
 
-def load_gaze_data():
+def load_gaze_data(stack=1):
     with open('src/config.yaml', 'r') as f:
         config_data = safe_load(f.read())
 
@@ -59,11 +59,31 @@ def load_gaze_data():
 
     frame_to_gaze = gaze_data[[gaze_data.columns[1], gaze_data.columns[-1]]]
     data_ix_f = 0
-    data_ix_t = 30
+    data_ix_t = 10
     images = []
+    rand_ixs = np.random.randint(
+        frame_to_gaze.shape[0], size=data_ix_t-data_ix_f)
     gazes = list(gaze_data['gaze_positions'])[data_ix_f:data_ix_t]
     gaze = gazes[0]
 
+    if stack > 1:
+        for frame_id in gaze_data['frame_id'][data_ix_f:data_ix_t]:
+            img_data = cv2.imread(os.path.join(
+                game_run_dir, frame_id+'.png'))
+            # cv2.imshow('rand_image', img_data)
+            # cv2.waitKey()
+            images.append(img_data)
+        images_ = []
+        gazes_ = []
+        for ix in range(len(images)-stack):
+            images_.append(
+                images[ix:ix+stack]
+            )
+            gazes_.append(
+                gazes[ix:ix+stack]
+            )
+
+        return images_, gazes_
     for frame_id in gaze_data['frame_id'][data_ix_f:data_ix_t]:
         img_data = cv2.imread(os.path.join(
             game_run_dir, frame_id+'.png'))

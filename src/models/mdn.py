@@ -1,3 +1,4 @@
+from random import shuffle
 import torch
 import numpy as np
 import torch.nn as nn
@@ -54,8 +55,11 @@ class MDN(nn.Module):
         # rho = self.z_rho(z)*0
 
         # return pi, sigma, mu, rho
+        mu = torch.clamp(mu, 0.1, 0.9)
+        sigma = torch.clamp(sigma, 0.1, 0.3)
+
         return pi, sigma, mu
-    
+
     def out_shape(self, layer, in_shape):
         h_in, w_in = in_shape
         h_out, w_out = floor(
@@ -95,6 +99,10 @@ class MDN(nn.Module):
         # sigma_y = torch.clamp(sigma_y, 0.1, 0.3)
         assert sigma_x.shape == sigma_y.shape, print(
             sigma_x.shape, sigma_y.shape)
+        self.writer.add_histogram('mu_x', mu_x)
+        self.writer.add_histogram('mu_y', mu_y)
+        self.writer.add_histogram('sigma_x', sigma_x)
+        self.writer.add_histogram('sigma_y', sigma_y)
 
         y = y.squeeze()
         # coord = y[torch.randint(0, len(y), (1, 1)).item()]
@@ -108,8 +116,8 @@ class MDN(nn.Module):
             y_val = (torch.pow(cy-mu_y, 2) *
                      torch.reciprocal(torch.pow(sigma_y, 2)))
             num = torch.exp(-(x_val + y_val))
-            self.writer.add_histogram('x_val', x_val)
-            self.writer.add_histogram('y_val', y_val)
+            # self.writer.add_histogram('x_val', x_val)
+            # self.writer.add_histogram('y_val', y_val)
 
             pdf = num * \
                 torch.reciprocal(2*np.pi*torch.mul(sigma_x, sigma_y))
@@ -133,6 +141,35 @@ class MDN(nn.Module):
 
         return result
 
+    def sos(self, y, mu, sigma):
+        # mu_x = mu[:, :self.num_gaussians]
+        mu_x = mu[:self.num_gaussians]
+        # mu_y = mu[:, self.num_gaussians:]
+        mu_y = mu[self.num_gaussians:]
+        assert mu_x.shape == mu_y.shape, print(mu_x.shape, mu_y.shape)
+
+        # sigma_x = sigma[:, :self.num_gaussians]
+        sigma_x = sigma[:self.num_gaussians]
+        # sigma_y = sigma[:, self.num_gaussians:]
+        sigma_y = sigma[self.num_gaussians:]
+        assert sigma_x.shape == sigma_y.shape, print(
+            sigma_x.shape, sigma_y.shape)
+
+        y = y.squeeze()
+        # coord = y[torch.randint(0, len(y), (1, 1)).item()]
+        result = 0
+
+        for coord in y:
+            cx = coord[0].expand(mu_x.shape[0]).reshape(1, -1)
+            cy = coord[1].expand(mu_y.shape[0]).reshape(1, -1)
+            x_val = torch.pow(cx-mu_x, 2)
+            y_val = torch.pow(cy-mu_y, 2)
+            pdf = 0
+            result += pdf
+        result /= len(y)
+
+        return result
+
     def loss_fn(self, pi_b, sigma_b, mu_b, y_b):
         result = []
         for pi, sig, mu, y in zip(pi_b, sigma_b, mu_b, y_b):
@@ -144,9 +181,25 @@ class MDN(nn.Module):
         # result = torch.pow(result, 2)
         return result
 
+    def loss_fn_sos(self, pi_b, sigma_b, mu_b, y_b):
+        result = []
+        for pi, sig, mu, y in zip(pi_b, sigma_b, mu_b, y_b):
+            res = self.sos(y, mu, sig)
+            res = torch.sum(res, dim=1)
+            res = -torch.log(res)
+            result.append(res)
+        result = torch.mean(torch.stack(result))
+        # result = torch.pow(result, 2)
+        return result
 
-def train_loop(net, opt, x_var, y_var):
+
+def train_loop(net, opt, x_var, y_var, batch_size):
+    # if x_var.shape[0] > batch_size:
+    #     print(x_var.shape)
+    #     print(y_var.shape)
+    #     exit()
     for epoch in range(10000):
+
         pi_variable, sigma_variable, mu_variable = net(
             x_var)
 
@@ -185,11 +238,16 @@ def gumbel_sample(x, axis=1):
     return (np.log(x) + z).argmax(axis=axis)
 
 
+def batch_splitter(x, y):
+    assert x.shape[0] == y.shape[0]
+    ixs = list(range(x.shape[0]))
+    
+    print(x)
+
+
 if __name__ == "__main__":
 
-    mdn = MDN()
-
-    optimizer = torch.optim.Adam(mdn.parameters(), lr=1e-3)
+   
 
     rand_image = np.random.random((80, 80, 1))
 
@@ -203,6 +261,12 @@ if __name__ == "__main__":
 
     x_variable = torch.autograd.Variable(torch.Tensor(rand_image).unsqueeze(0))
     y_variable = torch.autograd.Variable(torch.Tensor(rand_y).unsqueeze(0))
+    
+    batch_splitter(x_variable,y_variable)
 
+    exit()
+    mdn = MDN()
+
+    optimizer = torch.optim.Adam(mdn.parameters(), lr=1e-3)
     # train_loop(mdn, optimizer, x_variable, y_variable)
     infer(mdn, 10, x_variable)
