@@ -1,12 +1,8 @@
-from random import shuffle
 import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-import cv2
 from math import floor
-import matplotlib.pyplot as plt
-from scipy.stats import multivariate_normal
 from torch.utils.tensorboard import SummaryWriter
 from yaml import safe_load
 
@@ -14,16 +10,20 @@ np.random.seed(42)
 
 
 class CNN_GAZE(nn.Module):
-    def __init__(self, input_shape=(80, 80), load_model=False, epoch=200):
+    def __init__(self, input_shape=(84, 84), load_model=False, epoch=0):
         super(CNN_GAZE, self).__init__()
         self.input_shape = input_shape
+
         with open('src/config.yaml', 'r') as f:
-            config_data = safe_load(f.read())
-        self.config_yml = config_data
+            self.config_yml = safe_load(f.read())
+        self.model_save_string = self.config_yml['model_save_dir']+"{}".format(
+            self.__class__.__name__)+'_Epoch_{}.pt'
+
         self.writer = SummaryWriter()
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
-        # self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
-        self.pool = lambda x: x
+        self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
+        # self.pool = lambda x: x
+
         self.conv2 = nn.Conv2d(32, 64, 4, stride=(2, 2))
         self.conv3 = nn.Conv2d(64, 64, 3, stride=(1, 1))
         self.deconv1 = nn.ConvTranspose2d(64, 64, 3, stride=(1, 1))
@@ -33,13 +33,10 @@ class CNN_GAZE(nn.Module):
         self.batch_norm64 = nn.BatchNorm2d(64)
         self.dropout = nn.Dropout()
 
-        # self.lin_in_shape = self.lin_in_shape()
         self.softplus = torch.nn.Softplus()
         self.softmax = torch.nn.Softmax2d()
-        if load_model:
-            model_pickle = torch.load(
-                self.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
-            self.load_state_dict(model_pickle['model_state_dict'])
+        self.load_model = load_model
+        self.epoch = epoch
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -62,16 +59,13 @@ class CNN_GAZE(nn.Module):
         x = self.batch_norm32(x)
         x = self.dropout(x)
 
-        x = self.pool(F.relu(self.deconv3(x)))
-        # x = F.batch_norm(x)
-        # x = self.dropout(x)
-        # print(x.shape)
+        x = self.deconv3(x)
 
         x = x.squeeze(1)
-        # print(x.shape)
-        x = F.softmax(x, dim=1)
-        x = F.softmax(x, dim=2)
-        x = torch.clamp(x, min=-1, max=1)
+
+        x = x.view(-1, x.shape[1]*x.shape[2])
+
+        x = F.log_softmax(x, dim=1)
 
         return x
 
@@ -88,109 +82,81 @@ class CNN_GAZE(nn.Module):
         )
         return h_out, w_out
 
-    # def lin_in_shape(self):
-    #     outs = self.out_shape(self.conv1, self.input_shape)
-    #     outs = self.out_shape(self.pool, outs)
-    #     outs = self.out_shape(self.conv2, outs)
-    #     outs = self.out_shape(self.pool, outs)
-    #     outs = self.out_shape(self.conv3, outs)
-    #     outs = self.out_shape(self.pool, outs)
-    #     outs = self.out_shape(self.deconv1, outs)
-    #     outs = self.out_shape(self.pool, outs)
-    #     outs = self.out_shape(self.deconv2, outs)
-    #     outs = self.out_shape(self.pool, outs)
-    #     outs = self.out_shape(self.deconv3, outs)
-    #     outs = self.out_shape(self.pool, outs)
-
-    #     return outs
+    def lin_in_shape(self):
+        # TODO
+        # wrapper that gives num params
+        pass
 
     def loss_fn(self, loss_, smax_pi, targets):
-        # print(smax_pi.shape)
-        # print(targets.shape)
-        kl_loss = loss_(smax_pi, targets)
-        # kl_loss_sum = torch.sum(kl_loss, dim=[0, 1, 2])
-        # print(kl_loss.shape)
-        # print(kl_loss_sum.shape)
-        # exit()
+
+        targets_reshpaed = targets.view(-1, targets.shape[1]*targets.shape[2])
+
+        kl_loss = loss_(smax_pi, targets_reshpaed)
+
         return kl_loss
 
     def train_loop(self, opt, lr_scheduler, loss_, x_var, y_var, batch_size=32):
-        # if x_var.shape[0] > batch_size:
-        #     print(x_var.shape)
-        #     print(y_var.shape)
-        #     # exit()
         dataset = torch.utils.data.TensorDataset(x_var, y_var)
         train_data = torch.utils.data.DataLoader(
             dataset, batch_size=batch_size, shuffle=True)
-        for epoch in range(20000):
+        if self.load_model:
+            model_pickle = torch.load(
+                self.model_save_string.format(self.epoch))
+            self.load_state_dict(model_pickle['model_state_dict'])
+            opt.load_state_dict(model_pickle['model_state_dict'])
+            self.epoch = model_pickle['epoch']
+            loss_val = model_pickle['loss']
+
+        for epoch in range(self.epoch, 20000):
             for i, data in enumerate(train_data):
                 x, y = data
+
+                opt.zero_grad()
+
                 smax_pi = self.forward(
                     x)
 
-                # smax_pi_lps = torch.log(smax_pi.squeeze())
-                # plt.imshow(smax_pi.data.numpy()[0][0])
-                # plt.waitforbuttonpress()
-                loss = self.loss_fn(loss_, smax_pi.log(), y)
-                # loss = torch.nn.functional.mse_loss(smax_pi, y)
-                opt.zero_grad()
+                loss = self.loss_fn(loss_, smax_pi, y)
                 loss.backward()
-                # torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
                 opt.step()
-                # if epoch % 500 == 0:
-                #     lr_scheduler.step()
 
-                if epoch % 10 == 0:
+                if epoch % 100 == 0:
                     self.writer.add_histogram('smax', smax_pi[0])
                     self.writer.add_histogram('target', y)
                     self.writer.add_scalar('Loss', loss.data.item(), epoch)
-                    fig = plt.figure()
-                    fig.add_subplot(1, 2, 1)
-                    plt.imshow(smax_pi.data.numpy()[0])
-                    fig.add_subplot(1, 2, 2)
-                    plt.imshow(y[0])
-                    plt.show()
-                    plt.waitforbuttonpress()
-                    plt.close('all')
-
-                # if epoch % 10 == 0:
                     torch.save({
                         'epoch': epoch,
                         'model_state_dict': self.state_dict(),
                         'optimizer_state_dict': opt.state_dict(),
                         'loss': loss,
-                    }, self.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
+                    }, self.model_save_string.format(epoch))
 
     def infer(self, epoch, x_var):
         model_pickle = torch.load(
-            self.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
+            self.model_save_string.format(epoch))
         self.load_state_dict(model_pickle['model_state_dict'])
 
-        smax_dist = self.forward(x_var).data.numpy()
+        smax_dist = self.forward(
+            x_var).view(-1, self.input_shape[0], self.input_shape[1]).data.numpy()
 
         return smax_dist
 
 
 if __name__ == "__main__":
 
-    rand_image = np.random.random((80, 80, 1))
+    rand_image = torch.rand(4, 84, 84)
+    rand_target = torch.rand(4, 84, 84)
 
-    # cv2.imshow('rand_image', rand_image)
-    # cv2.waitKey()
-    rand_image = rand_image.reshape(1, 80, 80)
-    # rand_y = [[np.random.randint(0, 80), np.random.randint(0, 80)]
-    #           for _ in range(42)]
-    rand_y = [[np.random.random(), np.random.random()]
-              for _ in range(42)]
+    cnn_gaze_net = CNN_GAZE()
+    cnn_gaze_net.lin_in_shape()
+    optimizer = torch.optim.Adadelta(
+        cnn_gaze_net.parameters(), lr=1.0, rho=0.95)
 
-    x_variable = torch.autograd.Variable(torch.Tensor(rand_image).unsqueeze(0))
-    y_variable = torch.autograd.Variable(torch.Tensor(rand_y).unsqueeze(0))
+    # if scheduler is declared, ought to use & update it , else model never trains
+    # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+    #     optimizer, lr_lambda=lambda x: x*0.95)
+    lr_scheduler = None
 
-    batch_splitter(x_variable, y_variable)
-
-    exit()
-    mdn = MDN()
-
-    optimizer = torch.optim.Adam(mdn.parameters(), lr=1e-3)
-    # train_loop(mdn, optimizer, x_variable, y_variable)
-    infer(mdn, 10, x_variable)
+    loss_ = torch.nn.KLDivLoss(reduction='batchmean')
+    cnn_gaze_net.train_loop(optimizer, lr_scheduler, loss_, rand_image,
+                            rand_target, batch_size=4)

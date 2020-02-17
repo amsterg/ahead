@@ -11,7 +11,7 @@ import os
 import pandas as pd
 
 
-def load_gaze_data(stack=1):
+def load_gaze_data(stack=1, stack_type='', stacking_skip=0, from_ix=0, till_ix=10, game='breakout', game_run='198_RZ_3877709_Dec-03-16-56-11'):
     with open('src/config.yaml', 'r') as f:
         config_data = safe_load(f.read())
 
@@ -19,14 +19,8 @@ def load_gaze_data(stack=1):
     proc_data_dir = config_data['proc_data_dir']
     interim_data_dir = config_data['interim_data_dir']
 
-    with open(os.path.join(raw_data_dir, 'action_enums.txt'), 'r') as f:
-        actions_enum = f.read()
-
-    # game_0 = 'breakout'
-    game = 'breakout'
-    game_run = '198_RZ_3877709_Dec-03-16-56-11'
-
-    valid_actions = config_data['valid_actions'][game]
+    game = game
+    game_run = game_run
 
     game_dir = os.path.join(interim_data_dir, game)
     game_run_dir = os.path.join(game_dir, game_run)
@@ -58,8 +52,8 @@ def load_gaze_data(stack=1):
                                                                     np.divide([float(co.strip()) for co in gp.split(',')], gaze_range) for gp in gps[2:-2].split('], [')])
 
     frame_to_gaze = gaze_data[[gaze_data.columns[1], gaze_data.columns[-1]]]
-    data_ix_f = 0
-    data_ix_t = 10
+    data_ix_f = from_ix
+    data_ix_t = till_ix
     images = []
     rand_ixs = np.random.randint(
         frame_to_gaze.shape[0], size=data_ix_t-data_ix_f)
@@ -70,8 +64,6 @@ def load_gaze_data(stack=1):
         for frame_id in gaze_data['frame_id'][data_ix_f:data_ix_t]:
             img_data = cv2.imread(os.path.join(
                 game_run_dir, frame_id+'.png'))
-            # cv2.imshow('rand_image', img_data)
-            # cv2.waitKey()
             images.append(img_data)
         images_ = []
         gazes_ = []
@@ -84,11 +76,10 @@ def load_gaze_data(stack=1):
             )
 
         return images_, gazes_
+
     for frame_id in gaze_data['frame_id'][data_ix_f:data_ix_t]:
         img_data = cv2.imread(os.path.join(
             game_run_dir, frame_id+'.png'))
-        # cv2.imshow('rand_image', img_data)
-        # cv2.waitKey()
         images.append(img_data)
     assert len(gazes) == len(images)
     return images, gazes
