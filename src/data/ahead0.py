@@ -14,20 +14,20 @@ from scipy.stats import multivariate_normal
 with open('src/config.yaml', 'r') as f:
     config_data = safe_load(f.read())
 
-raw_data_dir = config_data['raw_data_dir']
-proc_data_dir = config_data['proc_data_dir']
-print(raw_data_dir)
-with open(os.path.join(raw_data_dir, 'action_enums.txt'), 'r') as f:
-    actions_enum = f.read()
+RAW_DATA_DIR = config_data['RAW_DATA_DIR']
+PROC_DATA_DIR = config_data['PROC_DATA_DIR']
+print(RAW_DATA_DIR)
+with open(os.path.join(RAW_DATA_DIR, 'action_enums.txt'), 'r') as f:
+    ACTIONS_ENUM = f.read()
 
 # game_0 = 'breakout'
 game = 'breakout'
-valid_actions = config_data['valid_actions'][game]
-print(game, valid_actions)
+VALID_ACTIONS = config_data['VALID_ACTIONS'][game]
+print(game, VALID_ACTIONS)
 # game_0_run_0
 game_runs = [
     entry.split('.txt')[0]
-    for entry in os.listdir(os.path.join(raw_data_dir, game))
+    for entry in os.listdir(os.path.join(RAW_DATA_DIR, game))
     if entry.__contains__('.txt')
 ]
 
@@ -37,13 +37,13 @@ print(game_run)
 game_run_frames = OrderedDict({
     int(entry.split('_')[-1].split('.png')[0]): entry
     for entry in os.listdir(
-        os.path.join(os.path.join(raw_data_dir, game), game_run))
+        os.path.join(os.path.join(RAW_DATA_DIR, game), game_run))
     if entry.__contains__('.png')
 })
 
 game_run_data = []
 with open(
-        os.path.join(os.path.join(raw_data_dir, game), game_run) + '.txt',
+        os.path.join(os.path.join(RAW_DATA_DIR, game), game_run) + '.txt',
         'r') as f:
     csv_reader = csv.reader(f)
     for row in csv_reader:
@@ -83,12 +83,12 @@ for tstep in game_run_data:
 
 game_run_data_mod_df = pd.DataFrame(game_run_data_mod, columns=header)
 game_run_data_mod_df['action'] = game_run_data_mod_df['action'].apply(
-    lambda x: 0 if x not in valid_actions else x)
+    lambda x: 0 if x not in VALID_ACTIONS else x)
 
 frame_ids = game_run_data_mod_df['frame_id']
 assert len(frame_ids) == len(game_run_frames), print(len(frame_ids),
                                                      len(game_run_frames))
-proc_writ_dir = os.path.join(os.path.join(proc_data_dir, game),
+proc_writ_dir = os.path.join(os.path.join(PROC_DATA_DIR, game),
                              game_run) + '_wgz'
 img_writ_dir = os.path.join(proc_writ_dir, 'images/')
 img_diff_writ_dir = os.path.join(proc_writ_dir, 'images_diff/')
@@ -120,7 +120,7 @@ for fid in tqdm(frame_ids.index):
     assert game_run_data_mod_df.iloc[fid]['frame_id'] == game_run_frames[
         fid + 1].split('.png')[0]
     frame_abs_name = os.path.join(
-        os.path.join(os.path.join(raw_data_dir, game), game_run),
+        os.path.join(os.path.join(RAW_DATA_DIR, game), game_run),
         game_run_frames[fid + 1])
     frame_img_data = cv2.imread(frame_abs_name)
     frame_img_data_np = np.array(frame_img_data)
@@ -178,7 +178,7 @@ for fid in tqdm(frame_ids.index):
         np.float).astype(np.int)
 
     # ax = sns.regplot(x=gpts[:,0], y=gpts[:,1])
-    x, y = np.mgrid[0:frame_img_data.shape[1]:1,0:frame_img_data.shape[0]:1]
+    x, y = np.mgrid[0:frame_img_data.shape[1]:1, 0:frame_img_data.shape[0]:1]
     # x = x[::-1]
     # y = y[::-1]
     pos = np.dstack((x, y))
@@ -186,7 +186,7 @@ for fid in tqdm(frame_ids.index):
     ax2 = fig2.add_subplot(111)
     pdfs = []
     for gpt in gpts:
-        rv = multivariate_normal(mean=gpt,cov=5)
+        rv = multivariate_normal(mean=gpt, cov=5)
         pdfs.append(rv.pdf(pos))
         # plt.contourf(x, y, rv.pdf(pos),alpha=0.1)
         # break
@@ -198,7 +198,6 @@ for fid in tqdm(frame_ids.index):
     plt.ylim(plt.ylim()[::-1])
     plt.close()
 
-    
     # sns.scatterplot(x=gpts[:,0], y=gpts[:,1])
     # ax = sns.distributions.kdeplot(
     #     pd.DataFrame({'x': gpts[:, 0], 'y': gpts[:, 1]}))

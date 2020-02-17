@@ -16,7 +16,7 @@ class CNN_GAZE(nn.Module):
 
         with open('src/config.yaml', 'r') as f:
             self.config_yml = safe_load(f.read())
-        self.model_save_string = self.config_yml['model_save_dir']+"{}".format(
+        self.model_save_string = self.config_yml['MODEL_SAVE_DIR']+"{}".format(
             self.__class__.__name__)+'_Epoch_{}.pt'
 
         self.writer = SummaryWriter()

@@ -10,19 +10,18 @@ from yaml import safe_load
 import os
 import pandas as pd
 
+with open('src/config.yaml', 'r') as f:
+    config_data = safe_load(f.read())
+
+INTERIM_DATA_DIR = config_data['INTERIM_DATA_DIR']
+
 
 def load_gaze_data(stack=1, stack_type='', stacking_skip=0, from_ix=0, till_ix=10, game='breakout', game_run='198_RZ_3877709_Dec-03-16-56-11'):
-    with open('src/config.yaml', 'r') as f:
-        config_data = safe_load(f.read())
-
-    raw_data_dir = config_data['raw_data_dir']
-    proc_data_dir = config_data['proc_data_dir']
-    interim_data_dir = config_data['interim_data_dir']
 
     game = game
     game_run = game_run
 
-    game_dir = os.path.join(interim_data_dir, game)
+    game_dir = os.path.join(INTERIM_DATA_DIR, game)
     game_run_dir = os.path.join(game_dir, game_run)
     gaze_file = os.path.join(game_run_dir, game_run+'_gaze_data.csv')
 
@@ -52,13 +51,11 @@ def load_gaze_data(stack=1, stack_type='', stacking_skip=0, from_ix=0, till_ix=1
                                                                     np.divide([float(co.strip()) for co in gp.split(',')], gaze_range) for gp in gps[2:-2].split('], [')])
 
     frame_to_gaze = gaze_data[[gaze_data.columns[1], gaze_data.columns[-1]]]
+
     data_ix_f = from_ix
     data_ix_t = till_ix
     images = []
-    rand_ixs = np.random.randint(
-        frame_to_gaze.shape[0], size=data_ix_t-data_ix_f)
     gazes = list(gaze_data['gaze_positions'])[data_ix_f:data_ix_t]
-    gaze = gazes[0]
 
     if stack > 1:
         for frame_id in gaze_data['frame_id'][data_ix_f:data_ix_t]:

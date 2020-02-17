@@ -37,7 +37,7 @@ class MDN(nn.Module):
         # self.z_rho = nn.Linear(num_gaussians*6, num_gaussians)
         if load_model:
             model_pickle = torch.load(
-                self.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
+                self.config_yml['MODEL_SAVE_DIR']+'Epoch_{}.pt'.format(epoch))
             self.load_state_dict(model_pickle['model_state_dict'])
 
     def forward(self, x):
@@ -217,12 +217,12 @@ def train_loop(net, opt, x_var, y_var, batch_size):
                 'model_state_dict': net.state_dict(),
                 'optimizer_state_dict': opt.state_dict(),
                 'loss': loss,
-            }, net.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
+            }, net.config_yml['MODEL_SAVE_DIR']+'Epoch_{}.pt'.format(epoch))
 
 
 def infer(net, epoch, x_var):
     model_pickle = torch.load(
-        net.config_yml['model_save_dir']+'Epoch_{}.pt'.format(epoch))
+        net.config_yml['MODEL_SAVE_DIR']+'Epoch_{}.pt'.format(epoch))
     net.load_state_dict(model_pickle['model_state_dict'])
 
     pi, sig, mu = net(x_var)
@@ -241,13 +241,11 @@ def gumbel_sample(x, axis=1):
 def batch_splitter(x, y):
     assert x.shape[0] == y.shape[0]
     ixs = list(range(x.shape[0]))
-    
+
     print(x)
 
 
 if __name__ == "__main__":
-
-   
 
     rand_image = np.random.random((80, 80, 1))
 
@@ -261,8 +259,8 @@ if __name__ == "__main__":
 
     x_variable = torch.autograd.Variable(torch.Tensor(rand_image).unsqueeze(0))
     y_variable = torch.autograd.Variable(torch.Tensor(rand_y).unsqueeze(0))
-    
-    batch_splitter(x_variable,y_variable)
+
+    batch_splitter(x_variable, y_variable)
 
     exit()
     mdn = MDN()

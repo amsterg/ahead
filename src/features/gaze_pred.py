@@ -10,7 +10,7 @@ from src.data.load_interim import load_gaze_data
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # pylint: disable=all
-from utils import image_transforms, reduce_gaze_stack, draw_figs  # nopep8
+from feat_utils import image_transforms, reduce_gaze_stack, draw_figs  # nopep8
 
 with open('src/config.yaml', 'r') as f:
     config_data = safe_load(f.read())
@@ -24,7 +24,7 @@ optimizer = torch.optim.Adadelta(
 lr_scheduler = None
 loss_ = torch.nn.KLDivLoss(reduction='batchmean')
 
-# single game run data load
+# single game run data load, default loads only 10 data points
 images, gazes = load_gaze_data(stack=4)
 assert len(images) == len(gazes)
 
