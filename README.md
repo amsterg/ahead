@@ -12,7 +12,7 @@ Data Preparation
 * Run python [src/data/data_setup.py](ahead/src/data/data_setup.py)
     * Downloads the data into [src/data/raw](ahead/src/data/raw)
     * Creates interim data formats [src/data/interim](ahead/src/data/interim)
-    * Creates Processed data [src/data/processed](ahead/src/data/processed/) - TODO ( The models below can still be run without this, albeit they are a bit slow)
+    * Creates Processed data [src/data/processed](ahead/src/data/processed/) - TODO ( The models below can still be run without this.)
     * Does other structural setups 
 
 Gaze prediction
