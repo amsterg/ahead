@@ -13,6 +13,13 @@ PyYAML
 numpy
 pandas
 opencv-python
+torch
+torchvision
+tensorboard
+seaborn
+matplotlib
+scip
+scikit-learn
 
 # backwards compatibility
 pathlib2
