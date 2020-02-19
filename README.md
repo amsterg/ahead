@@ -21,6 +21,10 @@ Gaze prediction
     *   Run with [src/features/gaze_pred.py](ahead/src/features/gaze_pred.py)
 * MDN model at [src/models/mdn.py](ahead/src/models/mdn.py) - In process
 
+Supervised action learner
+===================
+* Model at [src/models/action_sl.py](ahead/src/models/action_sl.py)
+    *   Run with [src/features/act_pred.py](ahead/src/features/act_pred.py)
 
 Reinforcement Learning
 ===================

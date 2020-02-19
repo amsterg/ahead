@@ -82,7 +82,7 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
 
     game_run_data_mod_df = pd.DataFrame(game_run_data_mod, columns=header)
     game_run_data_mod_df['action'] = game_run_data_mod_df['action'].apply(
-        lambda x: 0 if x not in valid_actions else x)
+        lambda x: x if int(x) in valid_actions else 0)
 
     # frame_ids = game_run_data_mod_df['frame_id']
     # assert len(frame_ids) == len(game_run_frames), print(len(frame_ids),

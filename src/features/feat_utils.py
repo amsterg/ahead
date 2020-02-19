@@ -10,8 +10,9 @@ NUM_CLUSTERS = 20
 kmeans = KMeans(init='k-means++', n_clusters=NUM_CLUSTERS, n_init=10)
 
 
-def draw_figs(x_var, gazes):
+def draw_figs(x_var, x_title=0, gazes=None):
     fig = plt.figure()
+    fig.suptitle(x_title)
     fig.add_subplot(1, 2, 1)
     plt.imshow(x_var, cmap='RdPu')
     fig.add_subplot(1, 2, 2)
@@ -41,7 +42,6 @@ def gaze_pdf(gaze):
 
     x, y = np.mgrid[0:gaze_range[1]:1, 0:gaze_range[0]:1]
     pos = np.dstack((x, y))
-
     for gpt in gpts:
         rv = multivariate_normal(
             mean=gpt[::-1], cov=[[2.85*2.85, 0], [0, 2.92*2.92]])
@@ -87,7 +87,7 @@ def image_transforms(image_size=(84, 84)):
     )
 
 
-def draw_clusters(clusters_):
+def draw_clusters(clusters_, image_, gaze_):
     x, y = np.mgrid[0:image_.shape[1]:1, 0:image_.shape[0]:1]
 
     pos = np.dstack((x, y))
