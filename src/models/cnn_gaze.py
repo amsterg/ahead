@@ -131,13 +131,13 @@ class CNN_GAZE(nn.Module):
                         'loss': loss,
                     }, self.model_save_string.format(epoch))
 
-    def infer(self, epoch, x_var):
+    def infer(self,  x_var):
         model_pickle = torch.load(
-            self.model_save_string.format(epoch))
+            self.model_save_string.format(self.epoch))
         self.load_state_dict(model_pickle['model_state_dict'])
 
         smax_dist = self.forward(
-            x_var).view(-1, self.input_shape[0], self.input_shape[1]).data.numpy()
+            x_var).view(-1, self.input_shape[0], self.input_shape[1])
 
         return smax_dist
 

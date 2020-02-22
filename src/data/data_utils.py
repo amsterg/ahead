@@ -109,15 +109,16 @@ def create_interim_files(game='breakout'):
                                         game_run)
         gaze_out_file = '{}/{}_gaze_data.csv'.format(
             interim_writ_dir, game_run)
-        if not os.path.exists(gaze_out_file) or OVERWRITE_INTERIM_GAZE:
-            print("Prepping gaze data for {}/{}".format(game_run_dir, game_run))
-            gaze_file = os.path.join(game_run_dir, game_run_gaze)
-            process_gaze_data(gaze_file, gaze_out_file, valid_actions)
-        else:
-            print("Exists, Skipping prepping of {}/{}".format(game_run_dir, game_run))
 
         if os.path.exists(os.path.join(interim_game_dir, game_run)):
             print("Exists, Skipping {}/{}".format(game_run_dir, game_run))
         else:
             print("Extracting {}/{}".format(game_run_dir, game_run))
             call(untar_args)
+
+        if not os.path.exists(gaze_out_file) or OVERWRITE_INTERIM_GAZE:
+            print("Prepping gaze data for {}/{}".format(game_run_dir, game_run))
+            gaze_file = os.path.join(game_run_dir, game_run_gaze)
+            process_gaze_data(gaze_file, gaze_out_file, valid_actions)
+        else:
+            print("Exists, Skipping prepping of {}/{}".format(game_run_dir, game_run))

@@ -75,6 +75,17 @@ def reduce_gaze_stack(gaze_stack):
     return torch.Tensor(wpdf)
 
 
+def fuse_gazes(images_, gazes):
+    gazes_ = [torch.stack([torch.Tensor(gaze_pdf(gaze_))
+                           for gaze_ in gaze_stack]) for gaze_stack in gazes]
+    fused = torch.stack(images_) * torch.stack(gazes_)
+
+    return fused
+
+def normalize(img, val):
+    return (img-img.min())/(img.max()-img.min())*val
+
+
 def image_transforms(image_size=(84, 84)):
     return transforms.Compose(
         [

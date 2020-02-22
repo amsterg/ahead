@@ -15,7 +15,7 @@ from feat_utils import image_transforms, reduce_gaze_stack, draw_figs  # nopep8
 with open('src/config.yaml', 'r') as f:
     config_data = safe_load(f.read())
 
-INFER = False
+INFER = True
 cnn_gaze_net = CNN_GAZE()
 optimizer = torch.optim.Adadelta(
     cnn_gaze_net.parameters(), lr=1.0, rho=0.95)
@@ -56,7 +56,9 @@ if INFER:
     image_ = images[test_ix]
     gaze_ = gazes[test_ix]
     for cpt in tqdm(range(1000, 1020, 10)):
-        smax = cnn_gaze_net.infer(cpt, x_variable[test_ix].unsqueeze(0))
+        cnn_gaze_net.epoch = cpt
+        smax = cnn_gaze_net.infer(
+            x_variable[test_ix].unsqueeze(0)).data.numpy()
         draw_figs(x_var=smax[0], gazes=gazes_[test_ix].numpy())
 else:
     cnn_gaze_net.train_loop(optimizer, lr_scheduler, loss_, x_variable,

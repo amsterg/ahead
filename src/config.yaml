@@ -4,7 +4,26 @@ RAW_DATA_DIR : 'data/raw/'
 PROC_DATA_DIR : 'data/processed/'
 INTERIM_DATA_DIR : 'data/interim/'
 VALID_ACTIONS : {
-  'breakout': [3,4]
+  'breakout': [3,4],
+'freeway':[],
+
+# 'alien':[],
+# 'asterix':[],
+# 'bankheist':[],
+# 'berzerk':[],
+# 'centipede':[],
+# 'demonattack':[],
+# 'enduro':[],
+# 'frostbite':[],
+# 'hero':[],
+# 'montezuma':[],
+# 'mspacman':[],
+# 'namethisgame':[],
+# 'phoenix':[],
+# 'riverraidroadrunner':[],
+# 'seaquest':[],
+# 'spaceinvaders':[],
+# 'venture':[]
 }
 MODEL_SAVE_DIR : 'models_/'
 VIS_PREDS_DIR : 'data/vis/'

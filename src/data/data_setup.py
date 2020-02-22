@@ -19,9 +19,11 @@ DIRS_REQD = [RAW_DATA_DIR, PROC_DATA_DIR, INTERIM_DATA_DIR, MODEL_SAVE_DIR]
 for entry in DIRS_REQD:
     if not os.path.exists(entry):
         os.makedirs(entry)
+games = VALID_ACTIONS.keys()
 
-urls = ['https://zenodo.org/record/3451402/files/action_enums.txt',
-        'https://zenodo.org/record/3451402/files/breakout.zip']
+url_ph = 'https://zenodo.org/record/3451402/files/'
+urls = [url_ph+'action_enums.txt']
+urls += [url_ph+game+'.zip' for game in games]
 
 # download data using wget
 for url in urls:
