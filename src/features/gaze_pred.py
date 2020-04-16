@@ -1,11 +1,10 @@
-
 import os
 import sys
 import torch
 from tqdm import tqdm
 from yaml import safe_load
 from src.models.cnn_gaze import CNN_GAZE
-from src.data.load_interim import load_gaze_data
+from src.data.data_loaders import load_gaze_data
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -17,8 +16,7 @@ with open('src/config.yaml', 'r') as f:
 
 INFER = True
 cnn_gaze_net = CNN_GAZE()
-optimizer = torch.optim.Adadelta(
-    cnn_gaze_net.parameters(), lr=1.0, rho=0.95)
+optimizer = torch.optim.Adadelta(cnn_gaze_net.parameters(), lr=1.0, rho=0.95)
 # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
 #     optimizer, lr_lambda=lambda x: x*0.95)
 lr_scheduler = None
@@ -31,8 +29,10 @@ assert len(images) == len(gazes)
 transforms_ = image_transforms(image_size=(84, 84))
 
 # image crop and oher transforms
-images_ = [torch.stack([transforms_(image_).squeeze()
-                        for image_ in image_stack]) for image_stack in images]
+images_ = [
+    torch.stack([transforms_(image_).squeeze() for image_ in image_stack])
+    for image_stack in images
+]
 
 # transform gazes to tensors with clustering
 # gazes_ = [torch.stack([torch.Tensor(gaze_clusters(gaze_, num_clusters))

@@ -3,7 +3,7 @@ from sklearn.cluster import KMeans
 from scipy.stats import multivariate_normal
 from src.models.mdn import MDN, train_loop, infer
 from src.models.cnn_gaze import CNN_GAZE
-from src.data.load_interim import load_gaze_data
+from src.data.data_loaders import load_gaze_data
 from yaml import safe_load
 
 import torch
@@ -13,15 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
-transforms_ = transforms.Compose(
-    [
-        transforms.ToPILImage(),
-        transforms.Grayscale(),
-        transforms.Resize((80, 80)),
-        transforms.ToTensor(),
-
-    ]
-)
+transforms_ = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Grayscale(),
+    transforms.Resize((80, 80)),
+    transforms.ToTensor(),
+])
 
 num_gaussians = 10
 num_clusters = 20
@@ -36,7 +33,7 @@ kmeans = KMeans(init='k-means++', n_clusters=num_clusters, n_init=10)
 
 def gaze_clusters(gaze_data, num_clusters=num_gaussians):
     if len(gaze_data) < num_clusters:
-        dups = [gaze_data[-1] for _ in range(num_clusters-len(gaze_data))]
+        dups = [gaze_data[-1] for _ in range(num_clusters - len(gaze_data))]
         gaze_data += dups
     kmeans.fit(gaze_data)
     return kmeans.cluster_centers_
@@ -71,11 +68,11 @@ def draw_preds(model_cpt=0, x_infer=x_variable):
     # print(pi_data, sig_data, mu_data)
     gaze_range = [160.0, 210.0]  # w,h
 
-    mu_x = mu_data[0, :num_gaussians]*gaze_range[0]
-    mu_y = mu_data[0, num_gaussians:]*gaze_range[1]
+    mu_x = mu_data[0, :num_gaussians] * gaze_range[0]
+    mu_y = mu_data[0, num_gaussians:] * gaze_range[1]
 
-    sigma_x = sig_data[0, :num_gaussians]*gaze_range[0]
-    sigma_y = sig_data[0, num_gaussians:]*gaze_range[1]
+    sigma_x = sig_data[0, :num_gaussians] * gaze_range[0]
+    sigma_y = sig_data[0, num_gaussians:] * gaze_range[1]
 
     x, y = np.mgrid[0:image_.shape[1]:1, 0:image_.shape[0]:1]
     print(image_.shape)
@@ -164,10 +161,8 @@ def draw_clusters(clusters_):
 # clusters = gaze_clusters(gaze_, num_clusters)
 # draw_clusters(clusters)
 
-
 # y_variable = torch.Tensor(clusters).unsqueeze(0)
 # train_loop(mdn, optimizer, x_variable, y_variable, batch_size=32)
-
 
 for cpt in tqdm(range(800, 820, 10)):
     draw_preds(model_cpt=cpt, x_infer=x_variable[test_ix].unsqueeze(0))

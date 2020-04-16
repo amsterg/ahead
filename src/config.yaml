@@ -26,6 +26,9 @@ VALID_ACTIONS : {
 # 'venture':[]
 }
 MODEL_SAVE_DIR : 'models_/'
+RUNS_DIR : 'runs/'
 VIS_PREDS_DIR : 'data/vis/'
 CMP_FMT : '.tar.bz2'
 OVERWRITE_INTERIM_GAZE : False
+STACK_SIZE : 4
+BATCH_SIZE : 32

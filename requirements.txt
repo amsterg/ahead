@@ -18,8 +18,8 @@ torchvision
 tensorboard
 seaborn
 matplotlib
-scip
+scipy
 scikit-learn
 
 # backwards compatibility
-pathlib2
+# pathlib2

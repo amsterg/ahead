@@ -40,6 +40,6 @@ for url in urls:
             call(unzip_args)
 
 
-# create interim data files
-preprocess_str = "python src/data/preprox.py"
+# create interim and processed data
+preprocess_str = "python src/data/data_create.py"
 call(preprocess_str.split(' '))
