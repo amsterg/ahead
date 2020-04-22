@@ -5,7 +5,7 @@ PROC_DATA_DIR : 'data/processed/'
 INTERIM_DATA_DIR : 'data/interim/'
 VALID_ACTIONS : {
   'breakout': [3,4],
-'freeway':[],
+'freeway':[2,5],
 
 # 'alien':[],
 # 'asterix':[],
@@ -18,7 +18,7 @@ VALID_ACTIONS : {
 # 'hero':[],
 # 'montezuma':[],
 # 'mspacman':[],
-# 'namethisgame':[],
+'name_this_game':[1,3,4,11,12],
 # 'phoenix':[],
 # 'riverraidroadrunner':[],
 # 'seaquest':[],

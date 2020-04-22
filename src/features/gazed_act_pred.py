@@ -23,13 +23,13 @@ GAZE_TYPE = "REAL"
 # only valid if GAZE_TYPE is PRED
 GAZE_PRED_TYPE = "CNN"
 
-DATA_COUNT = 10
 game = 'breakout'
-dataset = '198_RZ_3877709_Dec-03-16-56-11'  #game_run
+game = 'name_this_game'
+dataset_train = '198_RZ_3877709_Dec-03-16-56-11'  #game_run
 dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
+dataset_train = dataset_val = '576_RZ_4685615_Aug-01-13-54-21'
 device = torch.device('cuda')
 
-val_data = load_hdf_data(game=game, dataset=[dataset_val])
 if GAZE_TYPE == "PRED":
     data = ['images', 'actions']
 else:
@@ -37,8 +37,8 @@ else:
 
 action_net = GAZED_ACTION_SL(game=game,
                              data=data,
-                             dataset=dataset,
-                             val_data = val_data,
+                             dataset_train=dataset_train,
+                             dataset_val=dataset_val,
                              device=device).to(device=device)
 
 optimizer = torch.optim.Adadelta(action_net.parameters(), lr=1.0, rho=0.95)

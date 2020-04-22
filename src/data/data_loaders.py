@@ -191,7 +191,51 @@ def load_hdf_data(game='breakout',
                 datum, "doesn't exist in game", game, game_run)
             game_data[datum].append(game_run_data_h5[datum][:])
     return game_data
+
+
+def load_data_iter(game=None,
+                   data=['images', 'actions', 'fused_gazes'],
+                   dataset='combined',
+                   device=torch.device('cpu'),
+                   load_type='memory',
+                   batch_size=32,
+                   sampler=None):
+    """
+    Summary:
     
+    Args:
+    
+    Returns:
+    
+    """
+
+    if load_type == 'memory':
+        data = load_hdf_data(game=game, dataset=[dataset])
+        x, y_, x_g = data.values()
+        x = torch.Tensor(x).squeeze().to(device=device)
+        y = torch.LongTensor(y_).squeeze()[:, -1].to(device=device)
+        x_g = torch.Tensor(x_g).squeeze().to(device=device)
+        dataset = torch.utils.data.TensorDataset(x, y, x_g)
+        dataset.labels = y_[0][:,-1]
+
+    elif load_type == 'disk':
+        dataset = HDF5TorchDataset(game=game,
+                                   data=data,
+                                   dataset=dataset,
+                                   device=device)
+    
+    if sampler is None:
+        data_iter = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True)
+    else:
+        data_iter = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler(dataset))
+
+    return data_iter
 
 
 class HDF5TorchDataset(data.Dataset):

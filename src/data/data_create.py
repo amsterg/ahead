@@ -152,7 +152,7 @@ def combine_processed_data(game):
 
 
 if __name__ == "__main__":
-    combine_processed_data('breakout_comp_all_iag')
-    # for game in games:
-    # create_interim_files(game=game)
-    # create_processed_data(stack=STACK_SIZE, game=game, till_ix=10)
+    for game in games:
+        create_interim_files(game=game)
+        create_processed_data(stack=STACK_SIZE, game=game, till_ix=10)
+        combine_processed_data(game)

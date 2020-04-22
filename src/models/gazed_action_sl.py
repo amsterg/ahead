@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from yaml import safe_load
 import os
 from src.data.data_utils import ImbalancedDatasetSampler
-from src.data.data_loaders import HDF5TorchDataset
+from src.data.data_loaders import HDF5TorchDataset, load_data_iter
 
 np.random.seed(42)
 
@@ -20,35 +20,46 @@ class GAZED_ACTION_SL(nn.Module):
                  num_actions=18,
                  game='breakout',
                  data=['images', 'actions', 'fused_gazes'],
-                 dataset='combined',
-                 val_data='combined',
+                 dataset_train='combined',
+                 dataset_val='combined',
                  device=torch.device('cpu')):
         super(GAZED_ACTION_SL, self).__init__()
         self.game = game
         self.data = data
-        self.dataset = dataset
         self.input_shape = input_shape
         self.num_actions = num_actions
         with open('src/config.yaml', 'r') as f:
             self.config_yml = safe_load(f.read())
 
         model_save_dir = os.path.join(self.config_yml['MODEL_SAVE_DIR'], game,
-                                      dataset)
+                                      dataset_train)
         if not os.path.exists(model_save_dir):
             os.makedirs(model_save_dir)
 
         self.model_save_string = os.path.join(
             model_save_dir, self.__class__.__name__ + '_Epoch_{}.pt')
-        self.writer = SummaryWriter(
-            log_dir=os.path.join(self.config_yml['RUNS_DIR'], game, dataset,
-                                 self.__class__.__name__))
+        log_dir = os.path.join(
+            self.config_yml['RUNS_DIR'], game,
+            '{}_{}'.format(dataset_train, self.__class__.__name__))
+        self.writer = SummaryWriter(log_dir=os.path.join(
+            log_dir, "run_{}".format(
+                len(os.listdir(log_dir)) if os.path.exists(log_dir) else 0)))
         self.device = device
-        self.hdf5dataset = HDF5TorchDataset(game=self.game,
-                                            data=self.data,
-                                            dataset=self.dataset,
-                                            device=device)
-        self.val_data = val_data
+        self.batch_size = self.config_yml['BATCH_SIZE']
 
+        self.train_data_iter = load_data_iter(game=self.game,
+                                              data=self.data,
+                                              dataset=dataset_train,
+                                              device=device,
+                                              batch_size=self.batch_size,
+                                              sampler=ImbalancedDatasetSampler)
+
+        self.val_data_iter = load_data_iter(game=self.game,
+                                            data=self.data,
+                                            dataset=dataset_val,
+                                            device=device,
+                                            batch_size=self.batch_size)
+        
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
         # self.pool = lambda x: x
@@ -133,15 +144,6 @@ class GAZED_ACTION_SL(nn.Module):
                    batch_size=32,
                    gaze_pred=None):
 
-        train_data = torch.utils.data.DataLoader(
-            self.hdf5dataset,
-            batch_size=batch_size,
-            sampler=ImbalancedDatasetSampler(self.hdf5dataset))
-        # self.val_data = torch.utils.data.DataLoader(
-        #     self.hdf5dataset,
-        #     batch_size=batch_size,
-        #     sampler=ImbalancedDatasetSampler(self.hdf5dataset))
-
         if self.load_model:
             model_pickle = torch.load(self.model_save_string.format(
                 self.epoch))
@@ -149,8 +151,9 @@ class GAZED_ACTION_SL(nn.Module):
             opt.load_state_dict(model_pickle['model_state_dict'])
             self.epoch = model_pickle['epoch']
             loss_val = model_pickle['loss']
+
         for epoch in range(self.epoch, 20000):
-            for i, data in enumerate(train_data):
+            for i, data in enumerate(self.train_data_iter):
                 if 'fused_gazes' in self.data:
                     x, y, x_g = data
                 else:
@@ -195,12 +198,9 @@ class GAZED_ACTION_SL(nn.Module):
         acc = 0
         ix = 0
         # print(self.val_data)
-        for i, data in enumerate(self.val_data):
+        for i, data in enumerate(self.val_data_iter):
             if 'fused_gazes' in self.data:
-                x, y, x_g = self.val_data.values()
-                x = torch.Tensor(x).squeeze().to(device=self.device)
-                y = torch.Tensor(y).squeeze()[:, -1].to(device=self.device)
-                x_g = torch.Tensor(x_g).squeeze().to(device=self.device)
+                x, y, x_g = data
             else:
                 with torch.no_grad():
                     x, y = self.val_data.values()
