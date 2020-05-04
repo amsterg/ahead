@@ -94,3 +94,4 @@ models_/
 
 #tensorboard summaries
 runs/
+runs_old/

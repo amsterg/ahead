@@ -4,10 +4,14 @@ from subprocess import call
 from tqdm import tqdm
 import pandas as pd
 from yaml import safe_load
+import h5py
+from src.features.feat_utils import transform_images, fuse_gazes_noop
+from collections import Counter
+import torch
+import torchvision
 
 with open('src/config.yaml', 'r') as f:
     config_data = safe_load(f.read())
-
 
 RAW_DATA_DIR = config_data['RAW_DATA_DIR']
 PROC_DATA_DIR = config_data['PROC_DATA_DIR']
@@ -55,12 +59,13 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
     for tstep in game_run_data:
         tstep_ = []
         tstep_ = tstep[:len(header) - 1]
-        if 'null' in tstep_:
-            if game_run_data_mod:
-                tstep_[1:] = game_run_data_mod[-1][1:len(header) - 1]
 
-                assert len(tstep_) == len(header) - 1, print(tstep_, header,
-                                                             len(tstep_), len(header))
+        # if 'null' in tstep_:
+        #     if game_run_data_mod:
+        #         tstep_[1:] = game_run_data_mod[-1][1:len(header) - 1]
+
+        #         assert len(tstep_) == len(header) - 1, print(tstep_, header,
+        #                                                      len(tstep_), len(header))
 
         gaze_data = tstep[len(header) - 1:]
         if len(gaze_data) == 1 and gaze_data[0] == 'null':
@@ -70,10 +75,9 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
             assert int(len(gaze_data) / len(gaze_data_)) == 1.0, print(
                 len(gaze_data), len(gaze_data_))
         else:
-            gaze_data_ = [
-                [float(gd) for gd in gaze_data[ix:ix + 2]] for ix in range(0,
-                                                                           len(gaze_data) - 1, 2)
-            ]
+            gaze_data_ = [[float(gd) for gd in gaze_data[ix:ix + 2]]
+                          for ix in range(0,
+                                          len(gaze_data) - 1, 2)]
             assert int(len(gaze_data) / len(gaze_data_)) == 2.0, print(
                 len(gaze_data), len(gaze_data_))
         tstep_.append(gaze_data_)
@@ -82,7 +86,7 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
 
     game_run_data_mod_df = pd.DataFrame(game_run_data_mod, columns=header)
     game_run_data_mod_df['action'] = game_run_data_mod_df['action'].apply(
-        lambda x: x if int(x) in valid_actions else 0)
+        lambda x: 0 if x == 'null' else (x if int(x) in valid_actions else 0))
 
     # frame_ids = game_run_data_mod_df['frame_id']
     # assert len(frame_ids) == len(game_run_frames), print(len(frame_ids),
@@ -91,34 +95,36 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
     game_run_data_mod_df.to_csv(gaze_out_file)
 
 
-def create_interim_files(game='breakout'):
+def stack_data(images, targets, stack=1, stack_type='', stacking_skip=0):
+    if images:
+        assert len(images) == len(targets)
+    if stack > 1:
+        images_ = []
+        targets_ = []
+        for ix in range(len(targets) - stack):
+            images_.append(images[ix:ix + stack])
+            targets_.append(targets[ix:ix + stack])
 
-    valid_actions = VALID_ACTIONS[game]
-    game_runs, game_runs_dirs, game_runs_gazes = get_game_entries_(
-        os.path.join(RAW_DATA_DIR, game))
+        return images_, targets_
+    if images:
+        assert len(images) == len(targets)
+    return images, targets
 
-    interim_game_dir = os.path.join(INTERIM_DATA_DIR, game)
-    if not os.path.exists(interim_game_dir):
-        os.makedirs(interim_game_dir)
 
-    for game_run, game_run_dir, game_run_gaze in tqdm(zip(game_runs, game_runs_dirs, game_runs_gazes)):
-        untar_sting = 'tar -xjf {} -C {}'.format(os.path.join(
-            game_run_dir, game_run)+CMP_FMT, interim_game_dir+'/')
-        untar_args = untar_sting.split(' ')
-        interim_writ_dir = os.path.join(interim_game_dir,
-                                        game_run)
-        gaze_out_file = '{}/{}_gaze_data.csv'.format(
-            interim_writ_dir, game_run)
 
-        if os.path.exists(os.path.join(interim_game_dir, game_run)):
-            print("Exists, Skipping {}/{}".format(game_run_dir, game_run))
-        else:
-            print("Extracting {}/{}".format(game_run_dir, game_run))
-            call(untar_args)
+class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
+    def __init__(self, dataset):
+        self.indices = list(range(len(dataset)))
+        self.num_samples = len(self.indices)
+        label_to_count = Counter(dataset.labels)
 
-        if not os.path.exists(gaze_out_file) or OVERWRITE_INTERIM_GAZE:
-            print("Prepping gaze data for {}/{}".format(game_run_dir, game_run))
-            gaze_file = os.path.join(game_run_dir, game_run_gaze)
-            process_gaze_data(gaze_file, gaze_out_file, valid_actions)
-        else:
-            print("Exists, Skipping prepping of {}/{}".format(game_run_dir, game_run))
+        weights = [1.0 / label_to_count[ix] for ix in dataset.labels]
+
+        self.weights = torch.DoubleTensor(weights)
+
+    def __iter__(self):
+        return (self.indices[i] for i in torch.multinomial(
+            self.weights, self.num_samples, replacement=True))
+
+    def __len__(self):
+        return self.num_samples
