@@ -1,0 +1,34 @@
+#PATHS
+
+RAW_DATA_DIR : 'data/raw/'
+PROC_DATA_DIR : 'data/processed/'
+INTERIM_DATA_DIR : 'data/interim/'
+VALID_ACTIONS : {
+  'breakout': [3,4],
+'freeway':[2,5],
+
+# 'alien':[],
+# 'asterix':[],
+# 'bankheist':[],
+# 'berzerk':[],
+# 'centipede':[],
+# 'demonattack':[],
+# 'enduro':[],
+# 'frostbite':[],
+# 'hero':[],
+# 'montezuma':[],
+# 'mspacman':[],
+'name_this_game':[1,3,4,11,12],
+# 'phoenix':[],
+# 'riverraidroadrunner':[],
+# 'seaquest':[],
+# 'spaceinvaders':[],
+# 'venture':[]
+}
+MODEL_SAVE_DIR : 'models_/'
+RUNS_DIR : 'runs/'
+VIS_PREDS_DIR : 'data/vis/'
+CMP_FMT : '.tar.bz2'
+OVERWRITE_INTERIM_GAZE : False
+STACK_SIZE : 4
+BATCH_SIZE : 32
