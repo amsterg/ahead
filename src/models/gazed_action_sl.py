@@ -52,20 +52,25 @@ class GAZED_ACTION_SL(nn.Module):
                                               dataset=dataset_train,
                                               device=device,
                                               batch_size=self.batch_size,
-                                              sampler=ImbalancedDatasetSampler)
+                                              sampler=ImbalancedDatasetSampler,
+                                              load_type='live')
 
         self.val_data_iter = load_data_iter(game=self.game,
                                             data=self.data,
                                             dataset=dataset_val,
                                             device=device,
-                                            batch_size=self.batch_size)
-        
+                                            batch_size=self.batch_size,
+                                            load_type='live')
+
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
         # self.pool = lambda x: x
 
         self.conv2 = nn.Conv2d(32, 64, 4, stride=(2, 2))
         self.conv3 = nn.Conv2d(64, 64, 3, stride=(1, 1))
+
+        # self.W = torch.nn.Parameter(torch.Tensor([1.0]), requires_grad=True)
+
         self.lin_in_shape = self.lin_in_shape()
         self.linear1 = nn.Linear(64 * np.prod(self.lin_in_shape), 512)
         self.linear2 = nn.Linear(512, 128)
@@ -93,6 +98,7 @@ class GAZED_ACTION_SL(nn.Module):
         x = self.dropout(x)
 
         # gaze_overlay forward
+        # x_g = (self.W * x_g)
         x_g = self.pool(self.relu(self.conv1(x_g)))
         x_g = self.batch_norm32(x_g)
         x_g = self.dropout(x_g)
@@ -187,29 +193,37 @@ class GAZED_ACTION_SL(nn.Module):
                         }, self.model_save_string.format(epoch))
 
     def infer(self, x_var, xg_var):
-        model_pickle = torch.load(self.model_save_string.format(self.epoch))
-        self.load_state_dict(model_pickle['model_state_dict'])
+        with torch.no_grad():
+            self.eval()
+            model_pickle = torch.load(self.model_save_string.format(
+                self.epoch))
+            self.load_state_dict(model_pickle['model_state_dict'])
 
-        acts = self.forward(x_var, xg_var).argmax().data.numpy()
-
+            acts = self.forward(x_var, xg_var).argmax().data.numpy()
+            self.train()
+            
         return acts
 
     def accuracy(self):
         acc = 0
         ix = 0
         # print(self.val_data)
-        for i, data in enumerate(self.val_data_iter):
-            if 'fused_gazes' in self.data:
-                x, y, x_g = data
-            else:
-                with torch.no_grad():
-                    x, y = self.val_data.values()
-                    x_g = gaze_pred.infer(x)
-                    x_g = x_g.unsqueeze(1).expand(x.shape)
+        with torch.no_grad():
+            self.eval()
+            for i, data in enumerate(self.val_data_iter):
+                if 'fused_gazes' in self.data:
+                    x, y, x_g = data
+                else:
+                    with torch.no_grad():
+                        x, y = self.val_data.values()
+                        x_g = gaze_pred.infer(x)
+                        x_g = x_g.unsqueeze(1).expand(x.shape)
 
-            acts = self.forward(x, x_g).argmax(dim=1)
-            acc += (acts == y).sum().item()
-            ix += y.shape[0]
+                acts = self.forward(x, x_g).argmax(dim=1)
+                acc += (acts == y).sum().item()
+                ix += y.shape[0]
+        
+        self.train()
         return (acc / ix)
 
 

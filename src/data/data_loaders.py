@@ -10,17 +10,17 @@ from yaml import safe_load
 import os
 import pandas as pd
 import h5py
-from src.data.data_utils import stack_data
-from src.features.feat_utils import fuse_gazes_noop
+from src.data.data_utils import stack_data, transform_images
+from src.features.feat_utils import fuse_gazes_noop, fuse_gazes
 from torch.utils import data
 import torch
 from src.data.data_utils import ImbalancedDatasetSampler
 
 with open('src/config.yaml', 'r') as f:
-    config_data = safe_load(f.read())
+    config = safe_load(f.read())
 
-INTERIM_DATA_DIR = config_data['INTERIM_DATA_DIR']
-PROC_DATA_DIR = config_data['PROC_DATA_DIR']
+INTERIM_DATA_DIR = config['INTERIM_DATA_DIR']
+PROC_DATA_DIR = config['PROC_DATA_DIR']
 
 
 def load_pp_data(game='breakout', game_run='198_RZ_3877709_Dec-03-16-56-11'):
@@ -216,24 +216,41 @@ def load_data_iter(game=None,
         y = torch.LongTensor(y_).squeeze()[:, -1].to(device=device)
         x_g = torch.Tensor(x_g).squeeze().to(device=device)
         dataset = torch.utils.data.TensorDataset(x, y, x_g)
-        dataset.labels = y_[0][:,-1]
+        dataset.labels = y_[0][:, -1]
 
     elif load_type == 'disk':
         dataset = HDF5TorchDataset(game=game,
                                    data=data,
                                    dataset=dataset,
                                    device=device)
-    
+    elif load_type == 'live':
+        print("prepping and loading data for {},{}".format(game, dataset))
+        images_, actions_ = load_action_data(stack=config['STACK_SIZE'],
+                                             game=game,
+                                             till_ix=-1,
+                                             game_run=dataset)
+
+        _, gazes = load_gaze_data(stack=config['STACK_SIZE'],
+                                  game=game,
+                                  till_ix=-1,
+                                  game_run=dataset,
+                                  skip_images=True)
+        images_ = transform_images(images_, type='torch')
+        gazes = fuse_gazes(images_, gazes,gaze_count=1)
+        x = images_.to(device=device)
+        y = torch.LongTensor(actions_)[:, -1].to(device=device)
+        x_g = gazes.to(device=device)
+        dataset = torch.utils.data.TensorDataset(x, y, x_g)
+        dataset.labels = np.array(actions_)[:, -1]
+
     if sampler is None:
-        data_iter = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=True)
+        data_iter = torch.utils.data.DataLoader(dataset,
+                                                batch_size=batch_size,
+                                                shuffle=True)
     else:
-        data_iter = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=batch_size,
-            sampler=sampler(dataset))
+        data_iter = torch.utils.data.DataLoader(dataset,
+                                                batch_size=batch_size,
+                                                sampler=sampler(dataset))
 
     return data_iter
 

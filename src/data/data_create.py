@@ -110,9 +110,15 @@ def create_processed_data(stack=1,
         gazes = gazes.numpy()
 
         group = gaze_h5_file.create_group(game_run)
-        group.create_dataset('images', data=images_, compression="gzip")
-        group.create_dataset('actions', data=actions_, compression="gzip")
-        group.create_dataset('fused_gazes', data=gazes, compression="gzip")
+        group.create_dataset('images',
+                             data=images_,
+                             compression=config_data['HDF_CMP_TYPE'])
+        group.create_dataset('actions',
+                             data=actions_,
+                             compression=config_data['HDF_CMP_TYPE'])
+        group.create_dataset('fused_gazes',
+                             data=gazes,
+                             compression=config_data['HDF_CMP_TYPE'])
 
         del gazes, images_, actions_
 
@@ -137,7 +143,8 @@ def combine_processed_data(game):
         print(max_shape_datum, datum)
         all_group.create_dataset(datum,
                                  data=gaze_h5_file[groups[0]][datum][:],
-                                 maxshape=max_shape_datum)
+                                 maxshape=max_shape_datum,
+                                 compression=config_data['HDF_CMP_TYPE'])
 
         for group in tqdm(groups[1:]):
             gaze_h5_file['combined'][datum].resize(
@@ -154,5 +161,5 @@ def combine_processed_data(game):
 if __name__ == "__main__":
     for game in games:
         create_interim_files(game=game)
-        create_processed_data(stack=STACK_SIZE, game=game, till_ix=10)
+        create_processed_data(stack=STACK_SIZE, game=game, till_ix=-1)
         combine_processed_data(game)

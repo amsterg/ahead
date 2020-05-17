@@ -82,7 +82,7 @@ def fuse_gazes(images_, gazes, gaze_count=-1):
             torch.Tensor(gaze_pdf(gaze_, gaze_count)) for gaze_ in gaze_stack
         ]) for gaze_stack in gazes
     ]
-    fused = torch.stack(images_) * torch.stack(gazes_)
+    fused = images_ * torch.stack(gazes_)
     # print(fused.shape)
     # for img in images_[0]:
     #     plt.imshow(img)
