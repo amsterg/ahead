@@ -21,7 +21,9 @@ class GAZED_ACTION_SL(nn.Module):
                  game='breakout',
                  data=['images', 'actions', 'fused_gazes'],
                  dataset_train='combined',
+                 dataset_train_load_type='disk',
                  dataset_val='combined',
+                 dataset_val_load_type='disk',
                  device=torch.device('cpu')):
         super(GAZED_ACTION_SL, self).__init__()
         self.game = game
@@ -47,20 +49,21 @@ class GAZED_ACTION_SL(nn.Module):
         self.device = device
         self.batch_size = self.config_yml['BATCH_SIZE']
 
-        self.train_data_iter = load_data_iter(game=self.game,
-                                              data=self.data,
-                                              dataset=dataset_train,
-                                              device=device,
-                                              batch_size=self.batch_size,
-                                              sampler=ImbalancedDatasetSampler,
-                                              load_type='live')
+        self.train_data_iter = load_data_iter(
+            game=self.game,
+            data=self.data,
+            dataset=dataset_train,
+            device=device,
+            batch_size=self.batch_size,
+            sampler=ImbalancedDatasetSampler,
+            load_type=dataset_train_load_type)
 
         self.val_data_iter = load_data_iter(game=self.game,
                                             data=self.data,
                                             dataset=dataset_val,
                                             device=device,
                                             batch_size=self.batch_size,
-                                            load_type='live')
+                                            load_type=dataset_val_load_type)
 
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
@@ -158,7 +161,7 @@ class GAZED_ACTION_SL(nn.Module):
             self.epoch = model_pickle['epoch']
             loss_val = model_pickle['loss']
 
-        for epoch in range(self.epoch, 20000):
+        for epoch in range(self.epoch, 3):
             for i, data in enumerate(self.train_data_iter):
                 if 'fused_gazes' in self.data:
                     x, y, x_g = data
@@ -175,9 +178,9 @@ class GAZED_ACTION_SL(nn.Module):
                 loss.backward()
                 opt.step()
 
-                if epoch % 10 == 0:
-                    self.writer.add_histogram("acts", y)
-                    self.writer.add_histogram("preds", acts)
+                if epoch % 1 == 0:
+                    # self.writer.add_histogram("acts", y)
+                    # self.writer.add_histogram("preds", acts)
                     self.writer.add_scalar('Loss', loss.data.item(), epoch)
                     # self.writer.add_scalar('Acc',
                     #                        self.accuracy(x_g, gaze_pred),
@@ -195,21 +198,24 @@ class GAZED_ACTION_SL(nn.Module):
     def infer(self, x_var, xg_var):
         with torch.no_grad():
             self.eval()
-            model_pickle = torch.load(self.model_save_string.format(
-                self.epoch))
-            self.load_state_dict(model_pickle['model_state_dict'])
 
             acts = self.forward(x_var, xg_var).argmax().data.numpy()
             self.train()
-            
+
         return acts
+
+    def load_model_fn(self, epoch):
+        self.epoch = epoch
+        model_pickle = torch.load(self.model_save_string.format(self.epoch))
+        self.load_state_dict(model_pickle['model_state_dict'])
 
     def accuracy(self):
         acc = 0
         ix = 0
         # print(self.val_data)
+        self.eval()
+
         with torch.no_grad():
-            self.eval()
             for i, data in enumerate(self.val_data_iter):
                 if 'fused_gazes' in self.data:
                     x, y, x_g = data
@@ -220,9 +226,9 @@ class GAZED_ACTION_SL(nn.Module):
                         x_g = x_g.unsqueeze(1).expand(x.shape)
 
                 acts = self.forward(x, x_g).argmax(dim=1)
-                acc += (acts == y).sum().item()
+                acc += (acts == y).sum().data.item()
                 ix += y.shape[0]
-        
+
         self.train()
         return (acc / ix)
 

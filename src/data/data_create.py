@@ -10,8 +10,9 @@ from tqdm import tqdm
 from subprocess import call
 import h5py
 from src.data.data_loaders import load_action_data, load_gaze_data
-from src.features.feat_utils import transform_images, fuse_gazes_noop
+from src.features.feat_utils import transform_images, fuse_gazes_noop, reduce_gaze_stack, fuse_gazes
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import torch
 
 # pylint: disable=all
 from data_utils import get_game_entries_, process_gaze_data  # nopep8
@@ -34,7 +35,14 @@ games = VALID_ACTIONS.keys()
 
 
 def create_interim_files(game='breakout'):
-
+    """
+    Summary:
+    Creates Interim files in interfim directory from raw directory
+    Args:
+    game -- game to create interim files for 
+    Returns:
+    None
+    """
     valid_actions = VALID_ACTIONS[game]
     game_runs, game_runs_dirs, game_runs_gazes = get_game_entries_(
         os.path.join(RAW_DATA_DIR, game))
@@ -69,22 +77,40 @@ def create_interim_files(game='breakout'):
                 game_run_dir, game_run))
 
 
-def create_processed_data(stack=1,
-                          stack_type='',
-                          stacking_skip=0,
-                          from_ix=0,
-                          till_ix=-1,
-                          game='breakout'):
+def create_processed_data(
+    stack=1,
+    stack_type='',
+    stacking_skip=0,
+    from_ix=0,
+    till_ix=-1,
+    game='breakout',
+    data_type='gazed_images'  #gazes
+):
+    """
+    Summary:
+    Loads data from all the game runs in the interim  directory, and creates a hdf file in the processed directory
+    
+    Args:
 
+    data_type -- 'gazed_images' or 'gazes'
+    stack -- number of frames in the stacl,
+    stacking_skip -- Number of frames to skip while stacking
+
+    Returns:
+    None
+    """
     game_dir = os.path.join(INTERIM_DATA_DIR, game)
     game_runs = os.listdir(game_dir)
     images = []
     actions = []
-    gaze_out_h5_file = os.path.join(PROC_DATA_DIR, game + '.hdf5')
+    gaze_out_h5_file = os.path.join(PROC_DATA_DIR,
+                                    game + '_{}.hdf5'.format(data_type))
     gaze_h5_file = h5py.File(gaze_out_h5_file, 'w')
 
     for game_run in tqdm(game_runs):
         print("Creating processed data for ", game, game_run)
+        group = gaze_h5_file.create_group(game_run)
+
         images_, actions_ = load_action_data(stack, stack_type, stacking_skip,
                                              from_ix, till_ix, game, game_run)
 
@@ -99,34 +125,75 @@ def create_processed_data(stack=1,
 
         images_ = transform_images(images_, type='torch')
 
-        gazes = fuse_gazes_noop(images_,
-                                gazes,
-                                actions_,
-                                gaze_count=1,
-                                fuse_type='stack',
-                                fuse_val=1)
+        if data_type == 'gazed_images':
 
-        images_ = images_.numpy()
-        gazes = gazes.numpy()
+            gazes = fuse_gazes_noop(images_,
+                                    gazes,
+                                    actions_,
+                                    gaze_count=1,
+                                    fuse_type='stack',
+                                    fuse_val=1)
+            images_ = images_.numpy()
+            gazes = gazes.numpy()
+            group.create_dataset(
+                'images',
+                data=images_,
+                compression=config_data['HDF_CMP_TYPE'],
+            )
+            group.create_dataset(
+                'actions',
+                data=actions_,
+                compression=config_data['HDF_CMP_TYPE'],
+            )
+            group.create_dataset(
+                'fused_gazes',
+                data=gazes,
+                compression=config_data['HDF_CMP_TYPE'],
+            )
 
-        group = gaze_h5_file.create_group(game_run)
-        group.create_dataset('images',
-                             data=images_,
-                             compression=config_data['HDF_CMP_TYPE'])
-        group.create_dataset('actions',
-                             data=actions_,
-                             compression=config_data['HDF_CMP_TYPE'])
-        group.create_dataset('fused_gazes',
-                             data=gazes,
-                             compression=config_data['HDF_CMP_TYPE'])
+            del gazes, images_, actions_
 
-        del gazes, images_, actions_
+        else:
+            gazes = [reduce_gaze_stack(gaze_stack) for gaze_stack in gazes]
 
+            gazes = torch.stack(gazes)
+
+            images_ = images_.numpy()
+            gazes = gazes.numpy()
+
+            assert len(images_) == len(gazes), print(images_.shape,
+                                                     gazes.shape)
+            group.create_dataset(
+                'images',
+                data=images_,
+                compression=config_data['HDF_CMP_TYPE'],
+            )
+            group.create_dataset(
+                'gazes',
+                data=gazes,
+                compression=config_data['HDF_CMP_TYPE'],
+            )
+
+            del gazes, images_
     gaze_h5_file.close()
 
 
-def combine_processed_data(game):
-    gaze_out_h5_file = os.path.join(PROC_DATA_DIR, game + '.hdf5')
+def combine_processed_data(
+    game,
+    data_type='gazes'  # data_type gazes or gazed_images
+):
+    """
+    Summary:
+        Takes all the gropus in a hdf5 file 
+        and combines them into a new single group in the same file
+    Args:
+    data_type -- gazes or gazed_images
+    
+    Returns:
+    None
+    """
+    gaze_out_h5_file = os.path.join(PROC_DATA_DIR,
+                                    game + '_{}.hdf5'.format(data_type))
     gaze_h5_file = h5py.File(gaze_out_h5_file, 'a')
 
     groups = list(gaze_h5_file.keys())
@@ -141,10 +208,12 @@ def combine_processed_data(game):
             if group != 'combined'
         ]), *gaze_h5_file[groups[0]][datum].shape[1:])
         print(max_shape_datum, datum)
-        all_group.create_dataset(datum,
-                                 data=gaze_h5_file[groups[0]][datum][:],
-                                 maxshape=max_shape_datum,
-                                 compression=config_data['HDF_CMP_TYPE'])
+        all_group.create_dataset(
+            datum,
+            data=gaze_h5_file[groups[0]][datum][:],
+            maxshape=max_shape_datum,
+            compression=config_data['HDF_CMP_TYPE'],
+        )
 
         for group in tqdm(groups[1:]):
             gaze_h5_file['combined'][datum].resize(
@@ -159,7 +228,15 @@ def combine_processed_data(game):
 
 
 if __name__ == "__main__":
+    import time
     for game in games:
-        create_interim_files(game=game)
-        create_processed_data(stack=STACK_SIZE, game=game, till_ix=-1)
-        combine_processed_data(game)
+        print(game)
+        # create_interim_files(game=game)
+        s = time.time()
+        create_processed_data(stack=STACK_SIZE,
+                              game=game,
+                              till_ix=7,
+                              data_type='gazed_images')
+        e = time.time()
+        print(e - s)
+        combine_processed_data(game,data_type='gazed_images')

@@ -24,10 +24,9 @@ GAZE_TYPE = "REAL"
 GAZE_PRED_TYPE = "CNN"
 
 game = 'breakout'
-game = 'name_this_game'
-dataset_train = '198_RZ_3877709_Dec-03-16-56-11'  #game_run
+# game = 'name_this_game'
+dataset_train = 'combined'  #game_run
 dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
-dataset_train = dataset_val = '576_RZ_4685615_Aug-01-13-54-21'
 device = torch.device('cuda')
 
 if GAZE_TYPE == "PRED":

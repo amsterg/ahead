@@ -15,6 +15,8 @@ from src.features.feat_utils import fuse_gazes_noop, fuse_gazes
 from torch.utils import data
 import torch
 from src.data.data_utils import ImbalancedDatasetSampler
+from itertools import cycle
+from collections import Counter
 
 with open('src/config.yaml', 'r') as f:
     config = safe_load(f.read())
@@ -171,8 +173,10 @@ def load_game_action_data(stack=1,
 
 def load_hdf_data(game='breakout',
                   dataset=['564_RZ_4602455_Jul-31-14-48-16'],
-                  data=['images', 'actions', 'fused_gazes']):
-    game_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
+                  data=['images', 'actions', 'fused_gazes'],
+                  data_type='gazed_images'):
+    game_file = os.path.join(PROC_DATA_DIR,
+                             game + '_{}.hdf5'.format(data_type))
     game_h5_file = h5py.File(game_file, 'r')
     game_data = []
     if dataset is -1:
@@ -236,12 +240,24 @@ def load_data_iter(game=None,
                                   game_run=dataset,
                                   skip_images=True)
         images_ = transform_images(images_, type='torch')
-        gazes = fuse_gazes(images_, gazes,gaze_count=1)
+        gazes = fuse_gazes(images_, gazes, gaze_count=1)
         x = images_.to(device=device)
         y = torch.LongTensor(actions_)[:, -1].to(device=device)
         x_g = gazes.to(device=device)
         dataset = torch.utils.data.TensorDataset(x, y, x_g)
         dataset.labels = np.array(actions_)[:, -1]
+    elif load_type == 'chunked':
+        sampler = None
+
+        if 'fused_gazes' in data:
+
+            dataset = HDF5TorchChunkDataset(game=game,
+                                            data=data,
+                                            device=device)
+        else:
+            dataset = HDF5TorchChunkGazeDataset(game=game,
+                                                data=data,
+                                                device=device)
 
     if sampler is None:
         data_iter = torch.utils.data.DataLoader(dataset,
@@ -253,6 +269,131 @@ def load_data_iter(game=None,
                                                 sampler=sampler(dataset))
 
     return data_iter
+
+
+class HDF5TorchChunkDataset(data.Dataset):
+    def __init__(self,
+                 game,
+                 data=['images', 'actions', 'fused_gazes'],
+                 device=torch.device('cpu')):
+        hdf5_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
+        self.hdf5_file = h5py.File(hdf5_file, 'r')
+        self.data = data
+        self.groups = cycle(
+            sorted(set(self.hdf5_file.keys()) - set(['combined']),
+                   reverse=True))
+        self.game = game
+        self.tensors = []
+        self.device = device
+        self.curr_group = None
+        self.group_lens = [
+            self.hdf5_file[g]['actions'].len()
+            for g in list(set(self.hdf5_file.keys()) - set(['combined']))
+        ]
+        self.total_count = sum(self.group_lens)
+        self.__reset_dataset__()
+
+    def __load_data__(self):
+        curr_group_data = load_hdf_data(game=self.game,
+                                        dataset=[self.curr_group])
+        self.x, self.y_, self.x_g = curr_group_data.values()
+        self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
+        self.y = torch.LongTensor(self.y_).squeeze()[:,
+                                                     -1].to(device=self.device)
+        self.x_g = torch.Tensor(self.x_g).squeeze().to(device=self.device)
+        self.y_ = self.y_[0][:, -1]
+
+    def __reset_dataset__(self):
+        print("Changing dataset from {}".format(self.curr_group))
+        self.curr_ix = 0
+        self.curr_group = next(self.groups)
+        print("                   to {}".format(self.curr_group))
+
+        self.curr_group_len = self.hdf5_file[self.curr_group]['actions'].len()
+        self.__load_data__()
+        label_to_count = Counter(self.y_)
+        weights = torch.DoubleTensor(
+            [1.0 / label_to_count[ix] for ix in self.y_])
+        self.sample_ixs = torch.multinomial(weights,
+                                            self.curr_group_len,
+                                            replacement=True)
+
+    def __len__(self):
+        return self.total_count
+
+    def __getitem__(self, ix):
+        tensors = []
+
+        if self.curr_ix == self.curr_group_len:
+            self.__reset_dataset__()
+
+        sample_ix = self.sample_ixs[self.curr_ix]
+
+        tensors = [self.x[sample_ix], self.y[sample_ix], self.x_g[sample_ix]]
+
+        self.curr_ix += 1
+
+        return tensors
+
+
+class HDF5TorchChunkGazeDataset(data.Dataset):
+    def __init__(self,
+                 game,
+                 data=['images', 'gazes'],
+                 device=torch.device('cpu')):
+        hdf5_file = os.path.join(PROC_DATA_DIR, '{}_gazes.hdf5'.format(game))
+        self.hdf5_file = h5py.File(hdf5_file, 'r')
+        self.data = data
+        self.groups = cycle(
+            sorted(set(self.hdf5_file.keys()) - set(['combined']),
+                   reverse=True))
+        self.game = game
+        self.tensors = []
+        self.device = device
+        self.curr_group = None
+        self.group_lens = [
+            self.hdf5_file[g]['gazes'].len()
+            for g in list(set(self.hdf5_file.keys()) - set(['combined']))
+        ]
+        self.total_count = sum(self.group_lens)
+        self.__reset_dataset__()
+
+    def __load_data__(self):
+        curr_group_data = load_hdf_data(game=self.game,
+                                        dataset=[self.curr_group],
+                                        data=self.data,
+                                        data_type='gazes')
+
+        self.x, self.y = curr_group_data.values()
+        self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
+        self.y = torch.Tensor(self.y).squeeze().to(device=self.device)
+
+    def __reset_dataset__(self):
+        print("Changing dataset from {}".format(self.curr_group))
+        self.curr_ix = 0
+        self.curr_group = next(self.groups)
+        print("                   to {}".format(self.curr_group))
+
+        self.curr_group_len = self.hdf5_file[self.curr_group]['gazes'].len()
+        self.__load_data__()
+
+    def __len__(self):
+        return self.total_count
+
+    def __getitem__(self, ix):
+        tensors = []
+
+        if self.curr_ix == self.curr_group_len:
+            self.__reset_dataset__()
+
+        sample_ix = self.curr_ix
+        # sample_ix = ix
+
+        tensors = [self.x[sample_ix], self.y[sample_ix]]
+
+        self.curr_ix += 1
+
+        return tensors
 
 
 class HDF5TorchDataset(data.Dataset):
@@ -291,20 +432,34 @@ if __name__ == "__main__":
     # load_gaze_data()
     # load_action_data(stack=4)
     # load_game_action_data(stack=4)
-    hdf5t = HDF5TorchDataset('breakout')
-    dl = data.DataLoader(hdf5t, 32, sampler=ImbalancedDatasetSampler(hdf5t))
+    # hdf5t = HDF5TorchDataset('breakout')
+    # dl = data.DataLoader(hdf5t, 32, sampler=ImbalancedDatasetSampler(hdf5t))
+    ds = HDF5TorchChunkDataset(game='breakout')
+    dl = data.DataLoader(ds, 3, shuffle=True)
+
+    for x in dl:
+        x, y, x_g = x
+    dl = load_data_iter(game='breakout',
+                        dataset='combined',
+                        batch_size=1,
+                        load_type='disk')
+
     arrivals = []
     # dl = data.DataLoader(hdf5t, 32, shuffle=True)
     while True:
 
         for x in dl:
             #     # print(hdf5t.tensors)
-            print(x)
-            arrivals.append(x.numpy())
-        # print(x)
-        # print(y.shape)
+            x, y, x_g = x
+            print(x.shape)
+            print(y.shape)
+            print(x_g.shape)
+            arrivals.append(x)
+            # print(x)
+            # print(y.shape)
+            break
 
         # print(z.s
         break
-    print(np.hstack(arrivals))
+    # print(np.hstack(arrivals))
     # break
