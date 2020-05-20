@@ -74,7 +74,7 @@ target/
 
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
-/notebooks/
+
 
 # exclude data from source control by default
 /data/
@@ -89,9 +89,3 @@ target/
 # Mypy cache
 .mypy_cache/
 
-#trained models
-models_/
-
-#tensorboard summaries
-runs/
-runs_old/
