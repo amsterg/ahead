@@ -3,7 +3,7 @@ import sys
 import torch
 from tqdm import tqdm
 from yaml import safe_load
-from src.models.cnn_gaze_2 import CNN_GAZE
+from src.models.cnn_gaze import CNN_GAZE
 from src.data.data_loaders import load_action_data, load_gaze_data
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.data.data_loaders import load_hdf_data
@@ -31,7 +31,7 @@ gaze_net = CNN_GAZE(game=game,
                              dataset_train=dataset_train,
                              dataset_val=dataset_val,
                              dataset_train_load_type='chunked',
-                             dataset_val_load_type='chunked',
+                             dataset_val_load_type='memory',
                              device=device).to(device=device)
 
 optimizer = torch.optim.Adadelta(gaze_net.parameters(), lr=1.0, rho=0.95)

@@ -18,12 +18,12 @@ with open('src/config.yaml', 'r') as f:
 INFER = False
 BATCH_SIZE = config_data['BATCH_SIZE']
 # GAZE_TYPE = ["PRED","REAL"]
-GAZE_TYPE = "REAL"
+GAZE_TYPE = "PRED"
 
 # only valid if GAZE_TYPE is PRED
 GAZE_PRED_TYPE = "CNN"
 
-game = 'breakout'
+game = 'asterix'
 # game = 'name_this_game'
 dataset_train = 'combined'  #game_run
 dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
@@ -37,7 +37,9 @@ else:
 action_net = GAZED_ACTION_SL(game=game,
                              data=data,
                              dataset_train=dataset_train,
+                             dataset_train_load_type='chunked',
                              dataset_val=dataset_val,
+                             dataset_val_load_type='chunked',
                              device=device).to(device=device)
 
 optimizer = torch.optim.Adadelta(action_net.parameters(), lr=1.0, rho=0.95)
@@ -56,8 +58,17 @@ if INFER:
         print(action_, action_pred)
 else:
     if GAZE_TYPE == "PRED":
-        gaze_net = CNN_GAZE()
-        gaze_net.epoch = 3800
+        gaze_net = CNN_GAZE(game=game,
+                            data=data,
+                            dataset_train=dataset_train,
+                            dataset_val=dataset_val,
+                            dataset_train_load_type='chunked',
+                            dataset_val_load_type='chunked',
+                            device=device,
+                            mode='eval').to(device=device)
+        gaze_net.epoch = 0
+        gaze_net.load_model_fn(0)
+       
         action_net.train_loop(optimizer,
                               lr_scheduler,
                               loss_,

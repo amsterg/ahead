@@ -257,12 +257,13 @@ def load_data_iter(game=None,
         else:
             dataset = HDF5TorchChunkGazeDataset(game=game,
                                                 data=data,
-                                                device=device)
+                                                device=torch.device('cpu'))
 
     if sampler is None:
         data_iter = torch.utils.data.DataLoader(dataset,
                                                 batch_size=batch_size,
-                                                shuffle=True)
+                                                shuffle=True,
+                                                num_workers=0)
     else:
         data_iter = torch.utils.data.DataLoader(dataset,
                                                 batch_size=batch_size,
@@ -276,12 +277,14 @@ class HDF5TorchChunkDataset(data.Dataset):
                  game,
                  data=['images', 'actions', 'fused_gazes'],
                  device=torch.device('cpu')):
-        hdf5_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
+        hdf5_file = os.path.join(PROC_DATA_DIR, '{}_gazed_images.hdf5'.format(game))
         self.hdf5_file = h5py.File(hdf5_file, 'r')
         self.data = data
         self.groups = cycle(
             sorted(set(self.hdf5_file.keys()) - set(['combined']),
                    reverse=True))
+        self.epochs_per_group = 1
+        self.curr_group_epoch = 0
         self.game = game
         self.tensors = []
         self.device = device
@@ -290,33 +293,69 @@ class HDF5TorchChunkDataset(data.Dataset):
             self.hdf5_file[g]['actions'].len()
             for g in list(set(self.hdf5_file.keys()) - set(['combined']))
         ]
-        self.total_count = sum(self.group_lens)
+        self.num_groups_to_collate = 1
+        if self.num_groups_to_collate == 1:
+            self.total_count = self.epochs_per_group*sum(self.group_lens)
+        else:
+            self.total_count = sum(self.group_lens)
+        self.x = None
+        self.x_g = None
+        self.y_ = None
         self.__reset_dataset__()
 
     def __load_data__(self):
         curr_group_data = load_hdf_data(game=self.game,
-                                        dataset=[self.curr_group])
+                                        dataset=self.curr_group,
+                                        data=self.data,
+                                        data_type='gazed_images')
+        del self.x
+        del self.y_
+        del self.x_g
         self.x, self.y_, self.x_g = curr_group_data.values()
+        self.x = np.concatenate(self.x,axis=0)
+        self.y_ = np.concatenate(self.y_,axis=0)
+        self.x_g = np.concatenate(self.x_g,axis=0)
+
         self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
         self.y = torch.LongTensor(self.y_).squeeze()[:,
                                                      -1].to(device=self.device)
         self.x_g = torch.Tensor(self.x_g).squeeze().to(device=self.device)
-        self.y_ = self.y_[0][:, -1]
+        
+        self.y_ = self.y_[:, -1]
+        self.curr_group_len = self.x.shape[0]
 
     def __reset_dataset__(self):
-        print("Changing dataset from {}".format(self.curr_group))
-        self.curr_ix = 0
-        self.curr_group = next(self.groups)
-        print("                   to {}".format(self.curr_group))
 
-        self.curr_group_len = self.hdf5_file[self.curr_group]['actions'].len()
-        self.__load_data__()
-        label_to_count = Counter(self.y_)
-        weights = torch.DoubleTensor(
-            [1.0 / label_to_count[ix] for ix in self.y_])
-        self.sample_ixs = torch.multinomial(weights,
-                                            self.curr_group_len,
-                                            replacement=True)
+        self.curr_ix = 0
+        if self.num_groups_to_collate > 1:  #only 1 epoch per collated group
+            print("Changing dataset from {}".format(self.curr_group))
+            self.curr_group = [
+                next(self.groups) for _ in range(self.num_groups_to_collate)
+            ]
+            print("                   to {}".format(self.curr_group))
+
+            self.__load_data__()
+            label_to_count = Counter(self.y_)
+            weights = torch.DoubleTensor(
+                [1.0 / label_to_count[ix] for ix in self.y_])
+            self.sample_ixs = torch.multinomial(weights,
+                                                self.curr_group_len,
+                                                replacement=True)
+        else:
+            if self.curr_group_epoch == self.epochs_per_group or self.curr_group is None:
+                print("Changing dataset from {}".format(self.curr_group))
+                self.curr_group = [next(self.groups)]
+                print("                   to {}".format(self.curr_group))
+
+                self.__load_data__()
+                label_to_count = Counter(self.y_)
+                weights = torch.DoubleTensor(
+                    [1.0 / label_to_count[ix] for ix in self.y_])
+                self.sample_ixs = torch.multinomial(weights,
+                                                    self.curr_group_len,
+                                                    replacement=True)
+                
+            self.curr_group_epoch += 1
 
     def __len__(self):
         return self.total_count
@@ -345,37 +384,60 @@ class HDF5TorchChunkGazeDataset(data.Dataset):
         self.hdf5_file = h5py.File(hdf5_file, 'r')
         self.data = data
         self.groups = cycle(
-            sorted(set(self.hdf5_file.keys()) - set(['combined']),
-                   reverse=True))
+            sorted(set(self.hdf5_file.keys()) - set(['combined']),reverse=True))
         self.game = game
+        self.epochs_per_group = 3
+        self.curr_group_epoch = 0
         self.tensors = []
         self.device = device
         self.curr_group = None
+        self.x = None
+        self.y = None
         self.group_lens = [
             self.hdf5_file[g]['gazes'].len()
             for g in list(set(self.hdf5_file.keys()) - set(['combined']))
         ]
-        self.total_count = sum(self.group_lens)
+        self.num_groups_to_collate = 3
+        if self.num_groups_to_collate == 1:
+            self.total_count = self.epochs_per_group*sum(self.group_lens)
+        else:
+            self.total_count = sum(self.group_lens)
+
         self.__reset_dataset__()
 
     def __load_data__(self):
         curr_group_data = load_hdf_data(game=self.game,
-                                        dataset=[self.curr_group],
+                                        dataset=self.curr_group,
                                         data=self.data,
                                         data_type='gazes')
-
+        del self.x
+        del self.y
         self.x, self.y = curr_group_data.values()
+        self.x = np.concatenate(self.x,axis=0)
+        self.y = np.concatenate(self.y,axis=0)
         self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
         self.y = torch.Tensor(self.y).squeeze().to(device=self.device)
+        self.curr_group_len = self.x.shape[0]
 
     def __reset_dataset__(self):
-        print("Changing dataset from {}".format(self.curr_group))
         self.curr_ix = 0
-        self.curr_group = next(self.groups)
-        print("                   to {}".format(self.curr_group))
+        if self.num_groups_to_collate > 1:  #only 1 epoch per collated group
+            print("Changing dataset from {}".format(self.curr_group))
+            self.curr_group = [
+                next(self.groups) for _ in range(self.num_groups_to_collate)
+            ]
+            print("                   to {}".format(self.curr_group))
 
-        self.curr_group_len = self.hdf5_file[self.curr_group]['gazes'].len()
-        self.__load_data__()
+            self.__load_data__()
+        else:
+
+            if self.curr_group_epoch == self.epochs_per_group or self.curr_group is None:
+                self.curr_group_epoch = 0
+                print("Changing dataset from {}".format(self.curr_group))
+                self.curr_group = [next(self.groups)]
+                print("                   to {}".format(self.curr_group))
+                self.__load_data__()
+            self.curr_group_epoch += 1
 
     def __len__(self):
         return self.total_count
@@ -385,8 +447,10 @@ class HDF5TorchChunkGazeDataset(data.Dataset):
 
         if self.curr_ix == self.curr_group_len:
             self.__reset_dataset__()
+            # self.curr_ix = 0
 
         sample_ix = self.curr_ix
+        # sample_ix = np.random.randint(0,self.curr_group_len)
         # sample_ix = ix
 
         tensors = [self.x[sample_ix], self.y[sample_ix]]

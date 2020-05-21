@@ -24,7 +24,9 @@ class GAZED_ACTION_SL(nn.Module):
                  dataset_train_load_type='disk',
                  dataset_val='combined',
                  dataset_val_load_type='disk',
-                 device=torch.device('cpu')):
+                 device=torch.device('cpu'),
+                 gaze_type='real',
+                 gaze_pred_model=None):
         super(GAZED_ACTION_SL, self).__init__()
         self.game = game
         self.data = data
@@ -85,6 +87,8 @@ class GAZED_ACTION_SL(nn.Module):
         self.softmax = torch.nn.Softmax()
         self.load_model = load_model
         self.epoch = epoch
+
+        self.gaze_pred_model = gaze_pred_model
 
     def forward(self, x, x_g):
         # frame forward
@@ -152,7 +156,7 @@ class GAZED_ACTION_SL(nn.Module):
                    loss_,
                    batch_size=32,
                    gaze_pred=None):
-
+        self.gaze_pred_model = gaze_pred
         if self.load_model:
             model_pickle = torch.load(self.model_save_string.format(
                 self.epoch))
@@ -165,11 +169,14 @@ class GAZED_ACTION_SL(nn.Module):
             for i, data in enumerate(self.train_data_iter):
                 if 'fused_gazes' in self.data:
                     x, y, x_g = data
-                else:
+                if self.gaze_pred_model is not None:
+                    self.eval()
                     with torch.no_grad():
-                        x, y = data
-                        x_g = gaze_pred.infer(x)
-                        x_g = x_g.unsqueeze(1).expand(x.shape)
+                        # x, y = data
+                        x_g = self.gaze_pred_model.infer(x)
+                        x_g = x_g.unsqueeze(1).repeat(1,x.shape[1],1,1)
+                        
+                    self.train()
 
                 opt.zero_grad()
 
@@ -219,10 +226,10 @@ class GAZED_ACTION_SL(nn.Module):
             for i, data in enumerate(self.val_data_iter):
                 if 'fused_gazes' in self.data:
                     x, y, x_g = data
-                else:
+                elif self.gaze_pred_model is not None:
                     with torch.no_grad():
                         x, y = self.val_data.values()
-                        x_g = gaze_pred.infer(x)
+                        x_g = self.gaze_pred_model.infer(x)
                         x_g = x_g.unsqueeze(1).expand(x.shape)
 
                 acts = self.forward(x, x_g).argmax(dim=1)

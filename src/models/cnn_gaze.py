@@ -24,7 +24,8 @@ class CNN_GAZE(nn.Module):
                  dataset_train_load_type='disk',
                  dataset_val='combined',
                  dataset_val_load_type='disk',
-                 device=torch.device('cpu')):
+                 device=torch.device('cpu'),
+                 mode='eval'):
         super(CNN_GAZE, self).__init__()
         self.game = game
         self.data = data
@@ -48,22 +49,22 @@ class CNN_GAZE(nn.Module):
                 len(os.listdir(log_dir)) if os.path.exists(log_dir) else 0)))
         self.device = device
         self.batch_size = self.config_yml['BATCH_SIZE']
+        if mode != 'eval':
+            self.train_data_iter = load_data_iter(
+                game=self.game,
+                data=self.data,
+                dataset=dataset_train,
+                device=device,
+                batch_size=self.batch_size,
+                sampler=ImbalancedDatasetSampler,
+                load_type=dataset_train_load_type)
 
-        self.train_data_iter = load_data_iter(
-            game=self.game,
-            data=self.data,
-            dataset=dataset_train,
-            device=device,
-            batch_size=self.batch_size,
-            sampler=ImbalancedDatasetSampler,
-            load_type=dataset_train_load_type)
-
-        self.val_data_iter = load_data_iter(game=self.game,
-                                            data=self.data,
-                                            dataset=dataset_val,
-                                            device=device,
-                                            batch_size=self.batch_size,
-                                            load_type=dataset_val_load_type)
+        # self.val_data_iter = load_data_iter(game=self.game,
+        #                                     data=self.data,
+        #                                     dataset=dataset_val,
+        #                                     device=device,
+        #                                     batch_size=self.batch_size,
+        #                                     load_type=dataset_val_load_type)
 
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
@@ -82,7 +83,7 @@ class CNN_GAZE(nn.Module):
         self.linear3 = nn.Linear(128, self.num_actions)
         self.batch_norm32 = nn.BatchNorm2d(32)
         self.batch_norm64 = nn.BatchNorm2d(64)
-        self.dropout = nn.Dropout()
+        self.dropout = nn.Dropout(p=0.2)
         self.relu = nn.ReLU()
         self.softmax = torch.nn.Softmax()
         self.load_model = load_model
@@ -90,24 +91,24 @@ class CNN_GAZE(nn.Module):
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
-        x = self.batch_norm32(x)
-        x = self.dropout(x)
+        # x = self.batch_norm32(x)
+        # x = self.dropout(x)
 
         x = self.pool(F.relu(self.conv2(x)))
-        x = self.batch_norm64(x)
-        x = self.dropout(x)
+        # x = self.batch_norm64(x)
+        # x = self.dropout(x)
 
         x = self.pool(F.relu(self.conv3(x)))
-        x = self.batch_norm64(x)
-        x = self.dropout(x)
+        # x = self.batch_norm64(x)
+        # x = self.dropout(x)
 
         x = self.pool(F.relu(self.deconv1(x)))
-        x = self.batch_norm64(x)
-        x = self.dropout(x)
+        # x = self.batch_norm64(x)
+        # x = self.dropout(x)
 
         x = self.pool(F.relu(self.deconv2(x)))
-        x = self.batch_norm32(x)
-        x = self.dropout(x)
+        # x = self.batch_norm32(x)
+        # x = self.dropout(x)
 
         x = self.deconv3(x)
 
@@ -200,6 +201,11 @@ class CNN_GAZE(nn.Module):
         self.epoch = epoch
         model_pickle = torch.load(self.model_save_string.format(self.epoch))
         self.load_state_dict(model_pickle['model_state_dict'])
+        
+        self.epoch = model_pickle['epoch']
+        loss_val = model_pickle['loss']
+        print("Loaded {} model from saved checkpoint {} with loss {}".format(
+            self.__class__.__name__, self.epoch, loss_val))
 
 
 if __name__ == "__main__":
