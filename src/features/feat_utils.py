@@ -30,25 +30,31 @@ def gaze_clusters(gaze_data, num_clusters=NUM_CLUSTERS):
     return kmeans.cluster_centers_
 
 
-def gaze_pdf(gaze, gaze_count=-1):
+def gaze_pdf(gaze, gaze_count=1):
     pdfs_true = []
     gaze_range = [84, 84]  # w,h
     # gaze_range = [160.0, 210.0]  # w,h
 
     gaze_map = wpdf = np.zeros(gaze_range)
+    if gaze_count != -1:
+        gpts = gaze[-gaze_count:]
 
-    gpts = np.multiply(gaze, gaze_range).astype(np.int)
+    gpts = np.multiply(gpts, gaze_range)
     gpts = np.clip(gpts, 0, 83).astype(np.int)
 
     x, y = np.mgrid[0:gaze_range[1]:1, 0:gaze_range[0]:1]
     pos = np.dstack((x, y))
-    if gaze_count != -1:
-        gpts = gpts[-gaze_count:]
-
+    
     for gpt in gpts:
-        rv = multivariate_normal(mean=gpt[::-1],
-                                 cov=[[2.85 * 2.85, 0], [0, 2.92 * 2.92]])
-        pdfs_true.append(rv.pdf(pos))
+        # rv = multivariate_normal(mean=gpt[::-1],
+        #                          cov=[[2.85 * 2.85, 0], [0, 2.92 * 2.92]])
+        # pdfs_true.append(rv.pdf(pos))
+
+        pdf = multivariate_normal.pdf(pos,
+                                    gpt[::-1],
+                                    cov=[[2.85 * 2.85, 0], [0, 2.92 * 2.92]])
+        pdfs_true.append(pdf)
+
     pdf = np.sum(pdfs_true, axis=0)
     wpdf = pdf / np.sum(pdf)
     gaze_map = wpdf
@@ -57,8 +63,9 @@ def gaze_pdf(gaze, gaze_count=-1):
     # for gpt in gpts:
     #     gaze_map[gpt[1], gpt[0]] = 1
     # gaze_map = gaze_map/np.sum(gaze_map)
-    # draw_figs(wpdf, gazes=gaze_map)
+
     assert abs(np.sum(gaze_map) - 1) <= 1e-2, print(np.sum(gaze_map))
+    # draw_figs(wpdf, gazes=gaze_map)
 
     return gaze_map
 
