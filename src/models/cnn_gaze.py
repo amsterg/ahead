@@ -19,7 +19,7 @@ class CNN_GAZE(nn.Module):
                  epoch=0,
                  num_actions=18,
                  game='breakout',
-                 data=['images', 'gazes'],
+                 data_types=['images', 'gazes'],
                  dataset_train='combined',
                  dataset_train_load_type='disk',
                  dataset_val='combined',
@@ -28,7 +28,7 @@ class CNN_GAZE(nn.Module):
                  mode='eval'):
         super(CNN_GAZE, self).__init__()
         self.game = game
-        self.data = data
+        self.data_types = data_types
         self.input_shape = input_shape
         self.num_actions = num_actions
         with open('src/config.yaml', 'r') as f:
@@ -52,19 +52,20 @@ class CNN_GAZE(nn.Module):
         if mode != 'eval':
             self.train_data_iter = load_data_iter(
                 game=self.game,
-                data=self.data,
+                data_types=self.data_types,
                 dataset=dataset_train,
                 device=device,
                 batch_size=self.batch_size,
                 sampler=ImbalancedDatasetSampler,
                 load_type=dataset_train_load_type)
 
-        # self.val_data_iter = load_data_iter(game=self.game,
-        #                                     data=self.data,
-        #                                     dataset=dataset_val,
-        #                                     device=device,
-        #                                     batch_size=self.batch_size,
-        #                                     load_type=dataset_val_load_type)
+            self.val_data_iter = load_data_iter(
+                game=self.game,
+                data_types = self.data_types,
+                dataset=dataset_val,
+                device=device,
+                batch_size=self.batch_size,
+                load_type=dataset_val_load_type)
 
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
@@ -114,7 +115,7 @@ class CNN_GAZE(nn.Module):
 
         x = x.squeeze(1)
 
-        x = x.view(-1, x.shape[1]*x.shape[2])
+        x = x.view(-1, x.shape[1] * x.shape[2])
 
         x = F.log_softmax(x, dim=1)
 
@@ -140,7 +141,8 @@ class CNN_GAZE(nn.Module):
         return out_shape
 
     def loss_fn(self, loss_, smax_pi, targets):
-        targets_reshpaed = targets.view(-1, targets.shape[1]*targets.shape[2])
+        targets_reshpaed = targets.view(-1,
+                                        targets.shape[1] * targets.shape[2])
 
         kl_loss = loss_(smax_pi, targets_reshpaed)
 
@@ -163,12 +165,12 @@ class CNN_GAZE(nn.Module):
 
         for epoch in range(self.epoch, 20000):
             for i, data in enumerate(self.train_data_iter):
-                x, y = data
+                x = data['images']
+                y = data['gazes']
 
                 opt.zero_grad()
 
-                smax_pi = self.forward(
-                    x)
+                smax_pi = self.forward(x)
 
                 loss = self.loss_fn(loss_, smax_pi, y)
                 loss.backward()
@@ -178,20 +180,21 @@ class CNN_GAZE(nn.Module):
                     self.writer.add_histogram('smax', smax_pi[0])
                     self.writer.add_histogram('target', y)
                     self.writer.add_scalar('Loss', loss.data.item(), epoch)
-                    torch.save({
-                        'epoch': epoch,
-                        'model_state_dict': self.state_dict(),
-                        'optimizer_state_dict': opt.state_dict(),
-                        'loss': loss,
-                    }, self.model_save_string.format(epoch))
+                    torch.save(
+                        {
+                            'epoch': epoch,
+                            'model_state_dict': self.state_dict(),
+                            'optimizer_state_dict': opt.state_dict(),
+                            'loss': loss,
+                        }, self.model_save_string.format(epoch))
 
     def infer(self, x_var):
         self.eval()
 
         with torch.no_grad():
 
-            smax_dist = self.forward(
-            x_var).view(-1, self.input_shape[0], self.input_shape[1])
+            smax_dist = self.forward(x_var).view(-1, self.input_shape[0],
+                                                 self.input_shape[1])
 
         self.train()
 
@@ -201,7 +204,7 @@ class CNN_GAZE(nn.Module):
         self.epoch = epoch
         model_pickle = torch.load(self.model_save_string.format(self.epoch))
         self.load_state_dict(model_pickle['model_state_dict'])
-        
+
         self.epoch = model_pickle['epoch']
         loss_val = model_pickle['loss']
         print("Loaded {} model from saved checkpoint {} with loss {}".format(
@@ -215,8 +218,9 @@ if __name__ == "__main__":
 
     cnn_gaze_net = CNN_GAZE()
     cnn_gaze_net.lin_in_shape()
-    optimizer = torch.optim.Adadelta(
-        cnn_gaze_net.parameters(), lr=1.0, rho=0.95)
+    optimizer = torch.optim.Adadelta(cnn_gaze_net.parameters(),
+                                     lr=1.0,
+                                     rho=0.95)
 
     # if scheduler is declared, ought to use & update it , else model never trains
     # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -224,5 +228,9 @@ if __name__ == "__main__":
     lr_scheduler = None
 
     loss_ = torch.nn.KLDivLoss(reduction='batchmean')
-    cnn_gaze_net.train_loop(optimizer, lr_scheduler, loss_, rand_image,
-                            rand_target, batch_size=4)
+    cnn_gaze_net.train_loop(optimizer,
+                            lr_scheduler,
+                            loss_,
+                            rand_image,
+                            rand_target,
+                            batch_size=4)

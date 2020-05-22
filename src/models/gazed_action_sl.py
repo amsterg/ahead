@@ -19,17 +19,17 @@ class GAZED_ACTION_SL(nn.Module):
                  epoch=0,
                  num_actions=18,
                  game='breakout',
-                 data=['images', 'actions', 'fused_gazes'],
+                 data_types=['images', 'actions', 'gazes_fused_noop'],
                  dataset_train='combined',
                  dataset_train_load_type='disk',
                  dataset_val='combined',
                  dataset_val_load_type='disk',
                  device=torch.device('cpu'),
-                 gaze_type='real',
-                 gaze_pred_model=None):
+                 gaze_pred_model=None,
+                 mode='train'):
         super(GAZED_ACTION_SL, self).__init__()
         self.game = game
-        self.data = data
+        self.data_types = data_types
         self.input_shape = input_shape
         self.num_actions = num_actions
         with open('src/config.yaml', 'r') as f:
@@ -50,22 +50,26 @@ class GAZED_ACTION_SL(nn.Module):
                 len(os.listdir(log_dir)) if os.path.exists(log_dir) else 0)))
         self.device = device
         self.batch_size = self.config_yml['BATCH_SIZE']
+        if mode != 'eval':
+            self.train_data_iter = load_data_iter(
+                game=self.game,
+                data_types=self.data_types,
+                dataset=dataset_train,
+                device=device,
+                batch_size=self.batch_size,
+                sampler=ImbalancedDatasetSampler,
+                load_type=dataset_train_load_type,
+                dataset_exclude=['combined'],
+            )
 
-        self.train_data_iter = load_data_iter(
-            game=self.game,
-            data=self.data,
-            dataset=dataset_train,
-            device=device,
-            batch_size=self.batch_size,
-            sampler=ImbalancedDatasetSampler,
-            load_type=dataset_train_load_type)
-
-        self.val_data_iter = load_data_iter(game=self.game,
-                                            data=self.data,
-                                            dataset=dataset_val,
-                                            device=device,
-                                            batch_size=self.batch_size,
-                                            load_type=dataset_val_load_type)
+            self.val_data_iter = load_data_iter(
+                game=self.game,
+                data_types=self.data_types,
+                dataset=dataset_val,
+                device=device,
+                batch_size=self.batch_size,
+                load_type=dataset_val_load_type,
+            )
 
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
@@ -157,6 +161,8 @@ class GAZED_ACTION_SL(nn.Module):
                    batch_size=32,
                    gaze_pred=None):
         self.gaze_pred_model = gaze_pred
+        self.gaze_pred_model.eval()
+
         if self.load_model:
             model_pickle = torch.load(self.model_save_string.format(
                 self.epoch))
@@ -167,16 +173,13 @@ class GAZED_ACTION_SL(nn.Module):
 
         for epoch in range(self.epoch, 3):
             for i, data in enumerate(self.train_data_iter):
-                if 'fused_gazes' in self.data:
-                    x, y, x_g = data
+
+                x, y, x_g = self.get_data(data)
+
                 if self.gaze_pred_model is not None:
-                    self.eval()
                     with torch.no_grad():
-                        # x, y = data
                         x_g = self.gaze_pred_model.infer(x)
-                        x_g = x_g.unsqueeze(1).repeat(1,x.shape[1],1,1)
-                        
-                    self.train()
+                        x_g = x_g.unsqueeze(1).repeat(1, x.shape[1], 1, 1)
 
                 opt.zero_grad()
 
@@ -202,6 +205,17 @@ class GAZED_ACTION_SL(nn.Module):
                             'loss': loss,
                         }, self.model_save_string.format(epoch))
 
+    def get_data(self, data):
+        if isinstance(data, dict):
+            x = data['images']
+            y = data['actions']
+            x_g = data['gazes_fused_noop']
+
+        elif isinstance(data, list):
+            x, y, x_g = data
+
+        return x, y, x_g
+
     def infer(self, x_var, xg_var):
         with torch.no_grad():
             self.eval()
@@ -216,6 +230,11 @@ class GAZED_ACTION_SL(nn.Module):
         model_pickle = torch.load(self.model_save_string.format(self.epoch))
         self.load_state_dict(model_pickle['model_state_dict'])
 
+        self.epoch = model_pickle['epoch']
+        loss_val = model_pickle['loss']
+        print("Loaded {} model from saved checkpoint {} with loss {}".format(
+            self.__class__.__name__, self.epoch, loss_val))
+
     def accuracy(self):
         acc = 0
         ix = 0
@@ -224,11 +243,9 @@ class GAZED_ACTION_SL(nn.Module):
 
         with torch.no_grad():
             for i, data in enumerate(self.val_data_iter):
-                if 'fused_gazes' in self.data:
-                    x, y, x_g = data
-                elif self.gaze_pred_model is not None:
+                x, y, x_g = self.get_data(data)
+                if self.gaze_pred_model is not None:
                     with torch.no_grad():
-                        x, y = self.val_data.values()
                         x_g = self.gaze_pred_model.infer(x)
                         x_g = x_g.unsqueeze(1).expand(x.shape)
 

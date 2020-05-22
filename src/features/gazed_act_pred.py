@@ -23,23 +23,20 @@ GAZE_TYPE = "PRED"
 # only valid if GAZE_TYPE is PRED
 GAZE_PRED_TYPE = "CNN"
 
-game = 'asterix'
+game = 'breakout'
 # game = 'name_this_game'
 dataset_train = 'combined'  #game_run
 dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
 device = torch.device('cuda')
 
-if GAZE_TYPE == "PRED":
-    data = ['images', 'actions']
-else:
-    data = ['images', 'actions', 'fused_gazes']
+data_types = ['images', 'actions', 'gazes_fused_noop']
 
 action_net = GAZED_ACTION_SL(game=game,
-                             data=data,
+                             data_types=data_types,
                              dataset_train=dataset_train,
                              dataset_train_load_type='chunked',
                              dataset_val=dataset_val,
-                             dataset_val_load_type='chunked',
+                             dataset_val_load_type='memory',
                              device=device).to(device=device)
 
 optimizer = torch.optim.Adadelta(action_net.parameters(), lr=1.0, rho=0.95)
@@ -59,7 +56,7 @@ if INFER:
 else:
     if GAZE_TYPE == "PRED":
         gaze_net = CNN_GAZE(game=game,
-                            data=data,
+                            data_types=data_types,
                             dataset_train=dataset_train,
                             dataset_val=dataset_val,
                             dataset_train_load_type='chunked',

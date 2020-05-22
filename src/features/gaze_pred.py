@@ -17,22 +17,22 @@ with open('src/config.yaml', 'r') as f:
 INFER = False
 BATCH_SIZE = config_data['BATCH_SIZE']
 
-
-game = 'asterix'
+game = 'breakout'
 # game = 'name_this_game'
 dataset_train = dataset_val = 'combined'  #game_run
-# dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
+dataset_val = '564_RZ_4602455_Jul-31-14-48-16'
 device = torch.device('cuda')
 
-data = ['images', 'gazes']
+data_types = ['images', 'gazes']
 
 gaze_net = CNN_GAZE(game=game,
-                             data=data,
-                             dataset_train=dataset_train,
-                             dataset_val=dataset_val,
-                             dataset_train_load_type='chunked',
-                             dataset_val_load_type='memory',
-                             device=device).to(device=device)
+                    data_types=data_types,
+                    dataset_train=dataset_train,
+                    dataset_val=dataset_val,
+                    dataset_train_load_type='chunked',
+                    dataset_val_load_type='memory',
+                    device=device,
+                    mode='train').to(device=device)
 
 optimizer = torch.optim.Adadelta(gaze_net.parameters(), lr=1.0, rho=0.95)
 # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -46,12 +46,8 @@ if INFER:
     gaze_ = gazes[test_ix]
     for cpt in tqdm(range(1000, 1020, 10)):
         gaze_net.epoch = cpt
-        smax = gaze_net.infer(
-            x_variable[test_ix].unsqueeze(0)).data.numpy()
+        smax = gaze_net.infer(x_variable[test_ix].unsqueeze(0)).data.numpy()
         draw_figs(x_var=smax[0], gazes=gazes_[test_ix].numpy())
 
 else:
-    gaze_net.train_loop(optimizer,
-                            lr_scheduler,
-                            loss_,
-                            batch_size=BATCH_SIZE)
+    gaze_net.train_loop(optimizer, lr_scheduler, loss_, batch_size=BATCH_SIZE)

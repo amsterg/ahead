@@ -26,7 +26,19 @@ PROC_DATA_DIR = config['PROC_DATA_DIR']
 
 
 def load_pp_data(game='breakout', game_run='198_RZ_3877709_Dec-03-16-56-11'):
+    """Loads interim data for the specified game and game run 
+    
+    Args:
+    ----
+     game : game to load the data from, directory of game runs
+     game_run : game_run to load the data from, directory of frames and gaze data
 
+    Returns:
+    ----
+     gaze_data :  gaze data for the specified game run
+     game_run_dir : directory conatining game run frames
+    
+    """
     game = game
     game_run = game_run
 
@@ -61,10 +73,32 @@ def load_gaze_data(stack=1,
                    stack_type='',
                    stacking_skip=0,
                    from_ix=0,
-                   till_ix=10,
+                   till_ix=-1,
                    game='breakout',
                    game_run='198_RZ_3877709_Dec-03-16-56-11',
                    skip_images=False):
+    """Loads and processes gaze data/images for the specified game and game run
+    
+    Args:
+    ----
+     stack : Number of frames to stack
+     stack_type : ',
+     stacking_skip : Number of frames to skip while stacking,
+     from_ix --  starting index in the data, default is first, 0
+     
+     till_ix -- last index of the the data to be considered, default is last ,-1
+     
+     game : game to load the data from, directory of game runs
+     game_run : game_run to load the data from, directory of frames and gaze data
+ 
+     skip_images= if True doesn't return frames for the gaem run
+ 
+    Returns:
+    ----
+     images_ : None or images for the specified game run
+     gazes_ :  Formatted gaze data for the specified game run
+    
+    """
     gaze_data, game_run_dir = load_pp_data(game=game, game_run=game_run)
     gaze_range = [160.0, 210.0]  # w,h
     gaze_data['gaze_positions'] = gaze_data['gaze_positions'].apply(
@@ -97,6 +131,26 @@ def load_action_data(stack=1,
                      till_ix=10,
                      game='breakout',
                      game_run='198_RZ_3877709_Dec-03-16-56-11'):
+    """Loads and processes action data/images for the specified game and game run
+
+    Args:
+    ----
+     stack : Number of frames to stack
+     stack_type : ',
+     stacking_skip : Number of frames to skip while stacking,
+     from_ix --  starting index in the data, default is first, 0
+     
+     till_ix -- last index of the the data to be considered, default is last ,-1
+     
+     game : game to load the data from, directory of game runs
+     game_run : game_run to load the data from, directory of frames and gaze data
+ 
+    Returns:
+    ----
+     images_ : images for the specified game run
+     action_ : action data for the specified game run
+    
+    """
     gaze_data, game_run_dir = load_pp_data(game=game, game_run=game_run)
     data_ix_f = from_ix
     data_ix_t = till_ix
@@ -115,107 +169,83 @@ def load_action_data(stack=1,
     return images_, actions_
 
 
-def load_game_action_data(stack=1,
-                          stack_type='',
-                          stacking_skip=0,
-                          from_ix=0,
-                          till_ix=-1,
-                          game='breakout'):
-    game_dir = os.path.join(INTERIM_DATA_DIR, game)
-    game_runs = os.listdir(game_dir)
-    images = []
-    actions = []
-    gaze_out_h5_file = os.path.join(PROC_DATA_DIR, game + '.hdf5')
-    gaze_h5_file = h5py.File(gaze_out_h5_file, 'w')
-
-    for game_run in tqdm(game_runs):
-        print(game, game_run)
-        images_, actions_ = load_action_data(stack, stack_type, stacking_skip,
-                                             from_ix, till_ix, game, game_run)
-
-        _, gazes = load_gaze_data(stack,
-                                  stack_type,
-                                  stacking_skip,
-                                  from_ix,
-                                  till_ix,
-                                  game,
-                                  game_run,
-                                  skip_images=True)
-
-        images_ = transform_images(images_, type='torch')
-
-        gazes = fuse_gazes_noop(images_,
-                                gazes,
-                                actions_,
-                                gaze_count=1,
-                                fuse_type='stack',
-                                fuse_val=1)
-
-        images_ = images_.numpy()
-        gazes = gazes.numpy()
-
-        group = gaze_h5_file.create_group(game_run)
-        group.create_dataset('images', data=images_, compression="gzip")
-        group.create_dataset('actions', data=actions_, compression="gzip")
-        group.create_dataset('fused_gazes', data=gazes, compression="gzip")
-
-        # print(game, game_runs,
-        #       np.array(images_).shape,
-        #       np.array(actions_).shape,
-        #       np.array(gazes).shape)
-        #   np.array(gazes).shape)
-        # exit()
-
-        del gazes, images_, actions_
-
-    gaze_h5_file.close()
-
-
-def load_hdf_data(game='breakout',
-                  dataset=['564_RZ_4602455_Jul-31-14-48-16'],
-                  data=['images', 'actions', 'fused_gazes'],
-                  data_type='gazed_images'):
-    game_file = os.path.join(PROC_DATA_DIR,
-                             game + '_{}.hdf5'.format(data_type))
+def load_hdf_data(
+    game='breakout',
+    dataset=['564_RZ_4602455_Jul-31-14-48-16'],
+    data_types=['images', 'actions', 'gazes', 'gazes_fused_noop']):
+    """ Loads data from the hdf game file 
+    
+    Args:
+    ----
+     game : game to load the data from, directory of game runs
+     dataset : game_run to load the data from, a list of game runs.
+                dataset=['564_RZ_4602455_Jul-31-14-48-16'].
+     data_types : types of data to load from the file a list of data types.
+                ['images', 'actions', 'fused_gazes']
+    Returns:
+    ----
+     game_data : a dcit of game_data loaded from hdf5file for the specified game runs
+    
+    """
+    game_file = os.path.join(PROC_DATA_DIR, game + '.hdf5')
     game_h5_file = h5py.File(game_file, 'r')
     game_data = []
     if dataset is -1:
         dataset = list(game_h5_file.keys())
-    game_data = {k: [] for k in data}
+    game_data = {k: [] for k in data_types}
 
     actions = []
     for game_run in dataset:
-        # print(game_run)
         assert game_h5_file.__contains__(game_run), print(
             game_run, "doesn't exist in game", game)
         game_run_data_h5 = game_h5_file[game_run]
-
-        for datum in data:
+        for datum in data_types:
             assert game_run_data_h5.__contains__(datum), print(
                 datum, "doesn't exist in game", game, game_run)
             game_data[datum].append(game_run_data_h5[datum][:])
     return game_data
 
 
-def load_data_iter(game=None,
-                   data=['images', 'actions', 'fused_gazes'],
-                   dataset='combined',
-                   device=torch.device('cpu'),
-                   load_type='memory',
-                   batch_size=32,
-                   sampler=None):
+def load_data_iter(
+    game=None,
+    data_types=['images', 'actions', 'gazes', 'gazes_fused_noop'],
+    dataset='combined',
+    dataset_exclude=['combined'],
+    device=torch.device('cpu'),
+    load_type='memory',
+    batch_size=32,
+    sampler=None):
     """
-    Summary:
+    Creates a dataset and a data iterator to use in the train loop
     
     Args:
-    
+    ----
+     game : game to load the data from, directory of game runs
+     data_types -- types of data to load, contains atleast on of the following
+                ['frames/images', 'actions', 'gazes',' gazes_fused_noop']
+
+     dataset : game_run to load the data from, directory of frames and gaze data
+     device : device to load the data to cpu or gpu
+     load_type : data load type, different types are described below
+        'memory' --  'loads everything into memoey if possible else errors
+                        fastest option'
+        'disk' -- 'Reads from the hdf5 file the specified index every 
+                        iteration,slowest'
+        'live'  -- 'Directly loads from the interim files and  
+                        preprocesss the data'
+        'chunked' -- 
+    'batch_size : batch size of the data to iterate over, default 32
+    sampler : Type of sampler class to use when sampling the data, defualt None 
+
     Returns:
+    ----
+     data_iter : a data iterator with the specified data types that can be looped over
     
     """
 
     if load_type == 'memory':
         data = load_hdf_data(game=game, dataset=[dataset])
-        x, y_, x_g = data.values()
+        x, y_, _, x_g = data.values()
         x = torch.Tensor(x).squeeze().to(device=device)
         y = torch.LongTensor(y_).squeeze()[:, -1].to(device=device)
         x_g = torch.Tensor(x_g).squeeze().to(device=device)
@@ -224,7 +254,7 @@ def load_data_iter(game=None,
 
     elif load_type == 'disk':
         dataset = HDF5TorchDataset(game=game,
-                                   data=data,
+                                   data=data_types,
                                    dataset=dataset,
                                    device=device)
     elif load_type == 'live':
@@ -246,23 +276,18 @@ def load_data_iter(game=None,
         x_g = gazes.to(device=device)
         dataset = torch.utils.data.TensorDataset(x, y, x_g)
         dataset.labels = np.array(actions_)[:, -1]
+
     elif load_type == 'chunked':
         sampler = None
 
-        if 'fused_gazes' in data:
-
-            dataset = HDF5TorchChunkDataset(game=game,
-                                            data=data,
-                                            device=device)
-        else:
-            dataset = HDF5TorchChunkGazeDataset(game=game,
-                                                data=data,
-                                                device=torch.device('cpu'))
+        dataset = HDF5TorchChunkDataset(game=game,
+                                        data_types=data_types,
+                                        dataset_exclude=['combined'],
+                                        device=device)
 
     if sampler is None:
         data_iter = torch.utils.data.DataLoader(dataset,
                                                 batch_size=batch_size,
-                                                shuffle=True,
                                                 num_workers=0)
     else:
         data_iter = torch.utils.data.DataLoader(dataset,
@@ -275,87 +300,87 @@ def load_data_iter(game=None,
 class HDF5TorchChunkDataset(data.Dataset):
     def __init__(self,
                  game,
-                 data=['images', 'actions', 'fused_gazes'],
-                 device=torch.device('cpu')):
-        hdf5_file = os.path.join(PROC_DATA_DIR, '{}_gazed_images.hdf5'.format(game))
-        self.hdf5_file = h5py.File(hdf5_file, 'r')
-        self.data = data
-        self.groups = cycle(
-            sorted(set(self.hdf5_file.keys()) - set(['combined']),
-                   reverse=True))
-        self.epochs_per_group = 1
-        self.curr_group_epoch = 0
+                 data_types=['images', 'actions', 'gazes', 'gazes_fused_noop'],
+                 dataset_exclude=['combined'],
+                 device=torch.device('cpu'),
+                 num_epochs_per_collation=1,
+                 num_groups_to_collate=1):
         self.game = game
-        self.tensors = []
         self.device = device
-        self.curr_group = None
+        self.data_types = data_types
+        self.dataset_exclude = dataset_exclude
+        self.num_epochs_per_collation = num_epochs_per_collation
+        self.num_groups_to_collate = num_groups_to_collate
+
+        self.curr_collation_epoch = 0
+        self.curr_collation_data = {}
+
+        hdf5_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
+        self.hdf5_file = h5py.File(hdf5_file, 'r')
+
+        self.groups = cycle(
+            sorted(set(self.hdf5_file.keys()) - set(self.dataset_exclude),
+                   reverse=True))
         self.group_lens = [
-            self.hdf5_file[g]['actions'].len()
-            for g in list(set(self.hdf5_file.keys()) - set(['combined']))
+            self.hdf5_file[g]['actions'].len() for g in list(
+                set(self.hdf5_file.keys()) - set(self.dataset_exclude))
         ]
-        self.num_groups_to_collate = 1
-        if self.num_groups_to_collate == 1:
-            self.total_count = self.epochs_per_group*sum(self.group_lens)
-        else:
-            self.total_count = sum(self.group_lens)
-        self.x = None
-        self.x_g = None
-        self.y_ = None
+
+        self.total_count = self.num_epochs_per_collation * sum(self.group_lens)
+
+        self.tensors = []
+        self.curr_collation = None
+
         self.__reset_dataset__()
 
     def __load_data__(self):
-        curr_group_data = load_hdf_data(game=self.game,
-                                        dataset=self.curr_group,
-                                        data=self.data,
-                                        data_type='gazed_images')
-        del self.x
-        del self.y_
-        del self.x_g
-        self.x, self.y_, self.x_g = curr_group_data.values()
-        self.x = np.concatenate(self.x,axis=0)
-        self.y_ = np.concatenate(self.y_,axis=0)
-        self.x_g = np.concatenate(self.x_g,axis=0)
+        self.curr_collation_data = load_hdf_data(game=self.game,
+                                                 dataset=self.curr_collation,
+                                                 data_types=self.data_types)
 
-        self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
-        self.y = torch.LongTensor(self.y_).squeeze()[:,
-                                                     -1].to(device=self.device)
-        self.x_g = torch.Tensor(self.x_g).squeeze().to(device=self.device)
-        
-        self.y_ = self.y_[:, -1]
-        self.curr_group_len = self.x.shape[0]
+        for dtype in self.curr_collation_data:
+            datum = self.curr_collation_data[dtype]
+            datum = np.concatenate(datum, axis=0)
+            if dtype == 'actions':
+                datum = torch.LongTensor(datum).squeeze()[:, -1].to(
+                    device=self.device)
+            else:
+                datum = torch.Tensor(datum).squeeze().to(device=self.device)
+            self.curr_collation_data[dtype] = datum
+        group_lens = [
+            self.curr_collation_data[datum].shape[0]
+            for datum in self.curr_collation_data
+        ]
+
+        assert len(set(group_lens)) == 1
+        self.curr_collation_len = group_lens[0]
 
     def __reset_dataset__(self):
 
         self.curr_ix = 0
-        if self.num_groups_to_collate > 1:  #only 1 epoch per collated group
-            print("Changing dataset from {}".format(self.curr_group))
-            self.curr_group = [
+
+        if self.curr_collation_epoch == self.num_epochs_per_collation or self.curr_collation is None:
+            self.curr_collation_epoch = 0
+            # print("Cycling dataset from {}".format(self.curr_collation))
+            self.curr_collation = [
                 next(self.groups) for _ in range(self.num_groups_to_collate)
             ]
-            print("                   to {}".format(self.curr_group))
-
+            # print("                   to {}".format(self.curr_collation))
             self.__load_data__()
-            label_to_count = Counter(self.y_)
-            weights = torch.DoubleTensor(
-                [1.0 / label_to_count[ix] for ix in self.y_])
-            self.sample_ixs = torch.multinomial(weights,
-                                                self.curr_group_len,
-                                                replacement=True)
-        else:
-            if self.curr_group_epoch == self.epochs_per_group or self.curr_group is None:
-                print("Changing dataset from {}".format(self.curr_group))
-                self.curr_group = [next(self.groups)]
-                print("                   to {}".format(self.curr_group))
+            if 'actions' in self.curr_collation_data:
 
-                self.__load_data__()
-                label_to_count = Counter(self.y_)
+                labels = self.curr_collation_data['actions'].cpu().numpy(
+                ).copy()
+                label_to_count = Counter(labels)
                 weights = torch.DoubleTensor(
-                    [1.0 / label_to_count[ix] for ix in self.y_])
+                    [1.0 / label_to_count[ix] for ix in labels])
                 self.sample_ixs = torch.multinomial(weights,
-                                                    self.curr_group_len,
+                                                    self.curr_collation_len,
                                                     replacement=True)
-                
-            self.curr_group_epoch += 1
+            else:
+                self.sample_ixs = list(range(self.curr_collation_len))
+
+        self.curr_collation_epoch += 1
 
     def __len__(self):
         return self.total_count
@@ -363,97 +388,15 @@ class HDF5TorchChunkDataset(data.Dataset):
     def __getitem__(self, ix):
         tensors = []
 
-        if self.curr_ix == self.curr_group_len:
+        if self.curr_ix == self.curr_collation_len:
             self.__reset_dataset__()
 
         sample_ix = self.sample_ixs[self.curr_ix]
 
-        tensors = [self.x[sample_ix], self.y[sample_ix], self.x_g[sample_ix]]
-
-        self.curr_ix += 1
-
-        return tensors
-
-
-class HDF5TorchChunkGazeDataset(data.Dataset):
-    def __init__(self,
-                 game,
-                 data=['images', 'gazes'],
-                 device=torch.device('cpu')):
-        hdf5_file = os.path.join(PROC_DATA_DIR, '{}_gazes.hdf5'.format(game))
-        self.hdf5_file = h5py.File(hdf5_file, 'r')
-        self.data = data
-        self.groups = cycle(
-            sorted(set(self.hdf5_file.keys()) - set(['combined']),reverse=True))
-        self.game = game
-        self.epochs_per_group = 3
-        self.curr_group_epoch = 0
-        self.tensors = []
-        self.device = device
-        self.curr_group = None
-        self.x = None
-        self.y = None
-        self.group_lens = [
-            self.hdf5_file[g]['gazes'].len()
-            for g in list(set(self.hdf5_file.keys()) - set(['combined']))
-        ]
-        self.num_groups_to_collate = 3
-        if self.num_groups_to_collate == 1:
-            self.total_count = self.epochs_per_group*sum(self.group_lens)
-        else:
-            self.total_count = sum(self.group_lens)
-
-        self.__reset_dataset__()
-
-    def __load_data__(self):
-        curr_group_data = load_hdf_data(game=self.game,
-                                        dataset=self.curr_group,
-                                        data=self.data,
-                                        data_type='gazes')
-        del self.x
-        del self.y
-        self.x, self.y = curr_group_data.values()
-        self.x = np.concatenate(self.x,axis=0)
-        self.y = np.concatenate(self.y,axis=0)
-        self.x = torch.Tensor(self.x).squeeze().to(device=self.device)
-        self.y = torch.Tensor(self.y).squeeze().to(device=self.device)
-        self.curr_group_len = self.x.shape[0]
-
-    def __reset_dataset__(self):
-        self.curr_ix = 0
-        if self.num_groups_to_collate > 1:  #only 1 epoch per collated group
-            print("Changing dataset from {}".format(self.curr_group))
-            self.curr_group = [
-                next(self.groups) for _ in range(self.num_groups_to_collate)
-            ]
-            print("                   to {}".format(self.curr_group))
-
-            self.__load_data__()
-        else:
-
-            if self.curr_group_epoch == self.epochs_per_group or self.curr_group is None:
-                self.curr_group_epoch = 0
-                print("Changing dataset from {}".format(self.curr_group))
-                self.curr_group = [next(self.groups)]
-                print("                   to {}".format(self.curr_group))
-                self.__load_data__()
-            self.curr_group_epoch += 1
-
-    def __len__(self):
-        return self.total_count
-
-    def __getitem__(self, ix):
-        tensors = []
-
-        if self.curr_ix == self.curr_group_len:
-            self.__reset_dataset__()
-            # self.curr_ix = 0
-
-        sample_ix = self.curr_ix
-        # sample_ix = np.random.randint(0,self.curr_group_len)
-        # sample_ix = ix
-
-        tensors = [self.x[sample_ix], self.y[sample_ix]]
+        tensors = {
+            dtype: self.curr_collation_data[dtype][sample_ix]
+            for dtype in self.data_types
+        }
 
         self.curr_ix += 1
 
@@ -463,7 +406,7 @@ class HDF5TorchChunkGazeDataset(data.Dataset):
 class HDF5TorchDataset(data.Dataset):
     def __init__(self,
                  game,
-                 data=['images', 'actions', 'fused_gazes'],
+                 data=['images', 'actions', 'gazes'],
                  dataset='combined',
                  device=torch.device('cpu')):
         hdf5_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
@@ -483,7 +426,6 @@ class HDF5TorchDataset(data.Dataset):
         tensors = []
         for datum in self.data:
             if datum == 'actions':
-                # self.tensors.append(self.group[datum][ix][-1])
                 tensors.append(
                     torch.tensor(self.labels[ix]).to(device=self.device))
             else:
@@ -493,37 +435,12 @@ class HDF5TorchDataset(data.Dataset):
 
 
 if __name__ == "__main__":
-    # load_gaze_data()
-    # load_action_data(stack=4)
-    # load_game_action_data(stack=4)
-    # hdf5t = HDF5TorchDataset('breakout')
-    # dl = data.DataLoader(hdf5t, 32, sampler=ImbalancedDatasetSampler(hdf5t))
-    ds = HDF5TorchChunkDataset(game='breakout')
-    dl = data.DataLoader(ds, 3, shuffle=True)
+
+    ds = HDF5TorchChunkDataset(game='breakout',
+                               num_groups_to_collate=2,
+                               num_epochs_per_collation=1)
+
+    dl = load_data_iter(game='breakout', batch_size=1, load_type='chunked')
 
     for x in dl:
-        x, y, x_g = x
-    dl = load_data_iter(game='breakout',
-                        dataset='combined',
-                        batch_size=1,
-                        load_type='disk')
-
-    arrivals = []
-    # dl = data.DataLoader(hdf5t, 32, shuffle=True)
-    while True:
-
-        for x in dl:
-            #     # print(hdf5t.tensors)
-            x, y, x_g = x
-            print(x.shape)
-            print(y.shape)
-            print(x_g.shape)
-            arrivals.append(x)
-            # print(x)
-            # print(y.shape)
-            break
-
-        # print(z.s
-        break
-    # print(np.hstack(arrivals))
-    # break
+        print(x.keys())
