@@ -137,7 +137,7 @@ def create_processed_data(stack=1,
                                            actions_,
                                            gaze_count=1,
                                            fuse_type='stack',
-                                           fuse_val=1)
+                                           fuse_val=0)
         gazes = torch.stack(
             [reduce_gaze_stack(gaze_stack) for gaze_stack in gazes])
 

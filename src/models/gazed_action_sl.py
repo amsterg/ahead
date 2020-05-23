@@ -59,17 +59,17 @@ class GAZED_ACTION_SL(nn.Module):
                 batch_size=self.batch_size,
                 sampler=ImbalancedDatasetSampler,
                 load_type=dataset_train_load_type,
-                dataset_exclude=['combined'],
+                dataset_exclude=dataset_val,
             )
 
-            self.val_data_iter = load_data_iter(
-                game=self.game,
-                data_types=self.data_types,
-                dataset=dataset_val,
-                device=device,
-                batch_size=self.batch_size,
-                load_type=dataset_val_load_type,
-            )
+            # self.val_data_iter = load_data_iter(
+            #     game=self.game,
+            #     data_types=self.data_types,
+            #     dataset=dataset_val,
+            #     device=device,
+            #     batch_size=self.batch_size,
+            #     load_type=dataset_val_load_type,
+            # )
 
         self.conv1 = nn.Conv2d(4, 32, 8, stride=(4, 4))
         self.pool = nn.MaxPool2d((1, 1), (1, 1), (0, 0), (1, 1))
@@ -97,30 +97,30 @@ class GAZED_ACTION_SL(nn.Module):
     def forward(self, x, x_g):
         # frame forward
         x = self.pool(self.relu(self.conv1(x)))
-        x = self.batch_norm32(x)
-        x = self.dropout(x)
+        # x = self.batch_norm32(x)
+        # x = self.dropout(x)
 
         x = self.pool(self.relu(self.conv2(x)))
-        x = self.batch_norm64(x)
-        x = self.dropout(x)
+        # x = self.batch_norm64(x)
+        # x = self.dropout(x)
 
         x = self.pool(self.relu(self.conv3(x)))
-        x = self.batch_norm64(x)
-        x = self.dropout(x)
+        # x = self.batch_norm64(x)
+        # x = self.dropout(x)
 
         # gaze_overlay forward
         # x_g = (self.W * x_g)
         x_g = self.pool(self.relu(self.conv1(x_g)))
-        x_g = self.batch_norm32(x_g)
-        x_g = self.dropout(x_g)
+        # x_g = self.batch_norm32(x_g)
+        # x_g = self.dropout(x_g)
 
         x_g = self.pool(self.relu(self.conv2(x_g)))
-        x_g = self.batch_norm64(x_g)
-        x_g = self.dropout(x_g)
+        # x_g = self.batch_norm64(x_g)
+        # x_g = self.dropout(x_g)
 
         x_g = self.pool(self.relu(self.conv3(x_g)))
-        x_g = self.batch_norm64(x_g)
-        x_g = self.dropout(x_g)
+        # x_g = self.batch_norm64(x_g)
+        # x_g = self.dropout(x_g)
 
         # combine gaze conv + frame conv
         x = 0.5 * (x + x_g)
@@ -161,7 +161,8 @@ class GAZED_ACTION_SL(nn.Module):
                    batch_size=32,
                    gaze_pred=None):
         self.gaze_pred_model = gaze_pred
-        self.gaze_pred_model.eval()
+        if self.gaze_pred_model is not None:
+            self.gaze_pred_model.eval()
 
         if self.load_model:
             model_pickle = torch.load(self.model_save_string.format(
@@ -170,8 +171,8 @@ class GAZED_ACTION_SL(nn.Module):
             opt.load_state_dict(model_pickle['model_state_dict'])
             self.epoch = model_pickle['epoch']
             loss_val = model_pickle['loss']
-
-        for epoch in range(self.epoch, 3):
+        eix = 0
+        for epoch in range(self.epoch, 60):
             for i, data in enumerate(self.train_data_iter):
 
                 x, y, x_g = self.get_data(data)
@@ -179,7 +180,9 @@ class GAZED_ACTION_SL(nn.Module):
                 if self.gaze_pred_model is not None:
                     with torch.no_grad():
                         x_g = self.gaze_pred_model.infer(x)
+                        x_g = self.process_gaze(x_g)
                         x_g = x_g.unsqueeze(1).repeat(1, x.shape[1], 1, 1)
+                        x_g = x*x_g
 
                 opt.zero_grad()
 
@@ -187,23 +190,34 @@ class GAZED_ACTION_SL(nn.Module):
                 loss = self.loss_fn(loss_, acts, y)
                 loss.backward()
                 opt.step()
+                self.writer.add_scalar('Loss', loss.data.item(), eix)
+                eix+=1
+            self.writer.add_scalar('Acc', self.batch_acc(acts,y), epoch)
+            if epoch % 1 == 0:
+                # self.writer.add_histogram("acts", y)
+                # self.writer.add_histogram("preds", acts)
+                self.writer.add_scalar('Train Acc', self.accuracy(), epoch)
+                print("Epoch ", epoch, "loss", loss)
+                # self.calc_val_metrics(epoch)
+                torch.save(
+                    {
+                        'epoch': epoch,
+                        'model_state_dict': self.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'loss': loss,
+                    }, self.model_save_string.format(epoch))
 
-                if epoch % 1 == 0:
-                    # self.writer.add_histogram("acts", y)
-                    # self.writer.add_histogram("preds", acts)
-                    self.writer.add_scalar('Loss', loss.data.item(), epoch)
-                    # self.writer.add_scalar('Acc',
-                    #                        self.accuracy(x_g, gaze_pred),
-                    #                        epoch)
-                    self.writer.add_scalar('Acc', self.accuracy(), epoch)
+    def process_gaze(self,gaze):
+        gaze = torch.exp(gaze)
+        gazes = []
+        for g in gaze:
+            g = (g-torch.min(g))/(torch.max(g)-torch.min(g))
+            g = g/torch.sum(g)
+            gazes.append(g)
+        gaze = torch.stack(gazes)
+        del gazes
+        return gaze
 
-                    torch.save(
-                        {
-                            'epoch': epoch,
-                            'model_state_dict': self.state_dict(),
-                            'optimizer_state_dict': opt.state_dict(),
-                            'loss': loss,
-                        }, self.model_save_string.format(epoch))
 
     def get_data(self, data):
         if isinstance(data, dict):
@@ -235,18 +249,48 @@ class GAZED_ACTION_SL(nn.Module):
         print("Loaded {} model from saved checkpoint {} with loss {}".format(
             self.__class__.__name__, self.epoch, loss_val))
 
-    def accuracy(self):
+    def batch_acc(self,acts,y):
+        with torch.no_grad():
+            acc =  (acts.argmax(dim=1)==y).sum().data.item()/y.shape[0]
+        return acc
+
+    def calc_val_metrics(self,e):
         acc = 0
         ix = 0
-        # print(self.val_data)
+        loss = 0
         self.eval()
-
         with torch.no_grad():
             for i, data in enumerate(self.val_data_iter):
                 x, y, x_g = self.get_data(data)
                 if self.gaze_pred_model is not None:
                     with torch.no_grad():
                         x_g = self.gaze_pred_model.infer(x)
+                        x_g = self.process_gaze(x_g)
+                        
+                        x_g = x_g.unsqueeze(1).expand(x.shape)
+
+                acts = self.forward(x, x_g)
+                loss += self.loss_fn(loss_, acts, y).data.item()
+
+                acc += (acts.argmax(dim=1) == y).sum().data.item()
+                ix += y.shape[0]
+
+        self.train()
+        self.writer.add_scalar('Val Loss', loss/ix, e)
+        self.writer.add_scalar('Val Acc', acc/ix, e)
+
+    def accuracy(self):
+        acc = 0
+        ix = 0
+        self.eval()
+
+        with torch.no_grad():
+            for i, data in enumerate(self.train_data_iter):
+                x, y, x_g = self.get_data(data)
+                if self.gaze_pred_model is not None:
+                    with torch.no_grad():
+                        x_g = self.gaze_pred_model.infer(x)
+                        x_g = self.process_gaze(x_g)
                         x_g = x_g.unsqueeze(1).expand(x.shape)
 
                 acts = self.forward(x, x_g).argmax(dim=1)

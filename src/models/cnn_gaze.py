@@ -25,7 +25,7 @@ class CNN_GAZE(nn.Module):
                  dataset_val='combined',
                  dataset_val_load_type='disk',
                  device=torch.device('cpu'),
-                 mode='eval'):
+                 mode='train'):
         super(CNN_GAZE, self).__init__()
         self.game = game
         self.data_types = data_types
@@ -54,6 +54,7 @@ class CNN_GAZE(nn.Module):
                 game=self.game,
                 data_types=self.data_types,
                 dataset=dataset_train,
+                dataset_exclude=dataset_val,
                 device=device,
                 batch_size=self.batch_size,
                 sampler=ImbalancedDatasetSampler,
@@ -61,7 +62,7 @@ class CNN_GAZE(nn.Module):
 
             self.val_data_iter = load_data_iter(
                 game=self.game,
-                data_types = self.data_types,
+                data_types=self.data_types,
                 dataset=dataset_val,
                 device=device,
                 batch_size=self.batch_size,
@@ -154,7 +155,7 @@ class CNN_GAZE(nn.Module):
                    loss_,
                    batch_size=32,
                    gaze_pred=None):
-
+        self.loss_ = loss_
         if self.load_model:
             model_pickle = torch.load(self.model_save_string.format(
                 self.epoch))
@@ -162,11 +163,10 @@ class CNN_GAZE(nn.Module):
             opt.load_state_dict(model_pickle['model_state_dict'])
             self.epoch = model_pickle['epoch']
             loss_val = model_pickle['loss']
-
-        for epoch in range(self.epoch, 20000):
+        eix = 0
+        for epoch in range(self.epoch, 30):
             for i, data in enumerate(self.train_data_iter):
-                x = data['images']
-                y = data['gazes']
+                x, y = self.get_data(data)
 
                 opt.zero_grad()
 
@@ -175,18 +175,46 @@ class CNN_GAZE(nn.Module):
                 loss = self.loss_fn(loss_, smax_pi, y)
                 loss.backward()
                 opt.step()
+                # self.writer.add_scalar('Loss', loss.data.item(),
+                #                        (epoch + 1) * i)
+                self.writer.add_scalar('Loss', loss.data.item(), eix)
+                eix+=1
+            if epoch % 1 == 0:
+                # self.writer.add_histogram('smax', smax_pi[0])
+                # self.writer.add_histogram('target', y)
+                torch.save(
+                    {
+                        'epoch': epoch,
+                        'model_state_dict': self.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'loss': loss,
+                    }, self.model_save_string.format(epoch))
+            print("Epoch ", epoch, "loss", loss)
+            self.writer.add_scalar('Epoch Loss', loss.data.item(), epoch)
+            # self.writer.add_scalar('Epoch Val Loss',
+            #                        self.val_loss().data.item(), epoch)
 
-                if epoch % 10 == 0:
-                    self.writer.add_histogram('smax', smax_pi[0])
-                    self.writer.add_histogram('target', y)
-                    self.writer.add_scalar('Loss', loss.data.item(), epoch)
-                    torch.save(
-                        {
-                            'epoch': epoch,
-                            'model_state_dict': self.state_dict(),
-                            'optimizer_state_dict': opt.state_dict(),
-                            'loss': loss,
-                        }, self.model_save_string.format(epoch))
+    def get_data(self, data):
+        if isinstance(data, dict):
+            x = data['images']
+            y = data['gazes']
+
+        elif isinstance(data, list):
+            x, y = data
+
+        return x, y
+
+    def val_loss(self):
+        self.eval()
+        val_loss = []
+        with torch.no_grad():
+            for i, data in enumerate(self.val_data_iter):
+                x, y = self.get_data(data)
+                smax_pi = self.forward(x)
+
+                val_loss.append(self.loss_fn(self.loss_, smax_pi, y))
+        self.train()
+        return torch.mean(torch.Tensor(val_loss))
 
     def infer(self, x_var):
         self.eval()

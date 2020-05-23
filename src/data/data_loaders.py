@@ -84,9 +84,9 @@ def load_gaze_data(stack=1,
      stack : Number of frames to stack
      stack_type : ',
      stacking_skip : Number of frames to skip while stacking,
-     from_ix --  starting index in the data, default is first, 0
+     from_ix :  starting index in the data, default is first, 0
      
-     till_ix -- last index of the the data to be considered, default is last ,-1
+     till_ix : last index of the the data to be considered, default is last ,-1
      
      game : game to load the data from, directory of game runs
      game_run : game_run to load the data from, directory of frames and gaze data
@@ -138,9 +138,9 @@ def load_action_data(stack=1,
      stack : Number of frames to stack
      stack_type : ',
      stacking_skip : Number of frames to skip while stacking,
-     from_ix --  starting index in the data, default is first, 0
+     from_ix :  starting index in the data, default is first, 0
      
-     till_ix -- last index of the the data to be considered, default is last ,-1
+     till_ix : last index of the the data to be considered, default is last ,-1
      
      game : game to load the data from, directory of game runs
      game_run : game_run to load the data from, directory of frames and gaze data
@@ -221,7 +221,7 @@ def load_data_iter(
     Args:
     ----
      game : game to load the data from, directory of game runs
-     data_types -- types of data to load, contains atleast on of the following
+     data_types : types of data to load, contains atleast on of the following
                 ['frames/images', 'actions', 'gazes',' gazes_fused_noop']
 
      dataset : game_run to load the data from, directory of frames and gaze data
@@ -233,7 +233,8 @@ def load_data_iter(
                         iteration,slowest'
         'live'  -- 'Directly loads from the interim files and  
                         preprocesss the data'
-        'chunked' -- 
+        'chunked' -- 'Splits the given dataset hdf5 file into 
+                        specified chunks and cycles through them in the train loop'
     'batch_size : batch size of the data to iterate over, default 32
     sampler : Type of sampler class to use when sampling the data, defualt None 
 
@@ -244,7 +245,7 @@ def load_data_iter(
     """
 
     if load_type == 'memory':
-        data = load_hdf_data(game=game, dataset=[dataset])
+        data = load_hdf_data(game=game, dataset=dataset)
         x, y_, _, x_g = data.values()
         x = torch.Tensor(x).squeeze().to(device=device)
         y = torch.LongTensor(y_).squeeze()[:, -1].to(device=device)
@@ -282,7 +283,7 @@ def load_data_iter(
 
         dataset = HDF5TorchChunkDataset(game=game,
                                         data_types=data_types,
-                                        dataset_exclude=['combined'],
+                                        dataset_exclude=dataset_exclude,
                                         device=device)
 
     if sampler is None:
@@ -303,7 +304,7 @@ class HDF5TorchChunkDataset(data.Dataset):
                  data_types=['images', 'actions', 'gazes', 'gazes_fused_noop'],
                  dataset_exclude=['combined'],
                  device=torch.device('cpu'),
-                 num_epochs_per_collation=1,
+                 num_epochs_per_collation=2,
                  num_groups_to_collate=1):
         self.game = game
         self.device = device
@@ -317,15 +318,14 @@ class HDF5TorchChunkDataset(data.Dataset):
 
         hdf5_file = os.path.join(PROC_DATA_DIR, '{}.hdf5'.format(game))
         self.hdf5_file = h5py.File(hdf5_file, 'r')
-
-        self.groups = cycle(
-            sorted(set(self.hdf5_file.keys()) - set(self.dataset_exclude),
+        groups = list(sorted(set(self.hdf5_file.keys()) - set(self.dataset_exclude),
                    reverse=True))
+        print(groups)
+        
+        self.groups = cycle(groups)        
         self.group_lens = [
-            self.hdf5_file[g]['actions'].len() for g in list(
-                set(self.hdf5_file.keys()) - set(self.dataset_exclude))
+            self.hdf5_file[g]['actions'].len() for g in groups
         ]
-
         self.total_count = self.num_epochs_per_collation * sum(self.group_lens)
 
         self.tensors = []

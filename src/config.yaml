@@ -31,7 +31,8 @@ RUNS_DIR : 'runs/'
 VIS_PREDS_DIR : 'data/vis/'
 CMP_FMT : '.tar.bz2'
 HDF_CMP_TYPE : 'gzip'
-HDF_CMP_LEVEL : 9
+HDF_CMP_LEVEL : null
 OVERWRITE_INTERIM_GAZE : False
 STACK_SIZE : 4
 BATCH_SIZE : 32
+DATA_TYPES : ['frames', 'actions', 'gazes', 'gazes_fused_noop']
