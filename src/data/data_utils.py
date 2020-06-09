@@ -95,17 +95,17 @@ def process_gaze_data(gaze_file, gaze_out_file, valid_actions):
     game_run_data_mod_df.to_csv(gaze_out_file)
 
 
-def stack_data(images, targets, stack=1, stack_type='', stacking_skip=0):
+def stack_data(images, targets, stack=1, stack_type='', stacking_skip=1):
     if images:
         assert len(images) == len(targets)
-    if stack > 1:
+    if stack > 0:
         images_ = []
         targets_ = []
-        for ix in range(len(targets) - stack):
+        for ix in range(0,len(targets) - stack,stacking_skip):
             images_.append(images[ix:ix + stack])
             targets_.append(targets[ix:ix + stack])
-
         return images_, targets_
+        
     if images:
         assert len(images) == len(targets)
     return images, targets

@@ -30,7 +30,7 @@ def gaze_clusters(gaze_data, num_clusters=NUM_CLUSTERS):
     return kmeans.cluster_centers_
 
 
-def gaze_pdf(gaze, gaze_count=-1):
+def gaze_pdf(gaze, gaze_count=1):
     pdfs_true = []
     gaze_range = [84, 84]  # w,h
     # gaze_range = [160.0, 210.0]  # w,h

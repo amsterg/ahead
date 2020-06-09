@@ -71,7 +71,7 @@ def load_pp_data(game='breakout', game_run='198_RZ_3877709_Dec-03-16-56-11'):
 
 def load_gaze_data(stack=1,
                    stack_type='',
-                   stacking_skip=0,
+                   stacking_skip=1,
                    from_ix=0,
                    till_ix=-1,
                    game='breakout',
@@ -126,7 +126,7 @@ def load_gaze_data(stack=1,
 
 def load_action_data(stack=1,
                      stack_type='',
-                     stacking_skip=0,
+                     stacking_skip=1,
                      from_ix=0,
                      till_ix=10,
                      game='breakout',
@@ -284,6 +284,7 @@ def load_data_iter(
         dataset = HDF5TorchChunkDataset(game=game,
                                         data_types=data_types,
                                         dataset_exclude=dataset_exclude,
+                                        dataset=dataset,
                                         device=device)
 
     if sampler is None:
@@ -304,10 +305,11 @@ class HDF5TorchChunkDataset(data.Dataset):
                  data_types=['images', 'actions', 'gazes', 'gazes_fused_noop'],
                  dataset_exclude=['combined'],
                  device=torch.device('cpu'),
-                 num_epochs_per_collation=2,
-                 num_groups_to_collate=1):
+                 num_epochs_per_collation=1,
+                 num_groups_to_collate=1,dataset=['combined']):
         self.game = game
         self.device = device
+        self.dataset = dataset
         self.data_types = data_types
         self.dataset_exclude = dataset_exclude
         self.num_epochs_per_collation = num_epochs_per_collation
@@ -320,7 +322,11 @@ class HDF5TorchChunkDataset(data.Dataset):
         self.hdf5_file = h5py.File(hdf5_file, 'r')
         groups = list(sorted(set(self.hdf5_file.keys()) - set(self.dataset_exclude),
                    reverse=True))
-        print(groups)
+        if isinstance(self.dataset,list) and 'combined' not in self.dataset:
+            groups = self.dataset
+        
+        if dataset != 'combined':
+            groups = self.dataset_exclude
         
         self.groups = cycle(groups)        
         self.group_lens = [

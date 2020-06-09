@@ -80,7 +80,7 @@ def create_interim_files(game='breakout'):
 
 def create_processed_data(stack=1,
                           stack_type='',
-                          stacking_skip=0,
+                          stacking_skip=1,
                           from_ix=0,
                           till_ix=-1,
                           game='breakout',
@@ -121,7 +121,7 @@ def create_processed_data(stack=1,
 
         images_, actions_ = load_action_data(stack, stack_type, stacking_skip,
                                              from_ix, till_ix, game, game_run)
-
+        
         _, gazes = load_gaze_data(stack,
                                   stack_type,
                                   stacking_skip,
@@ -130,14 +130,14 @@ def create_processed_data(stack=1,
                                   game,
                                   game_run,
                                   skip_images=True)
-
         images_ = transform_images(images_, type='torch')
-        gazes_fused_noop = fuse_gazes_noop(images_,
-                                           gazes,
-                                           actions_,
-                                           gaze_count=1,
-                                           fuse_type='stack',
-                                           fuse_val=0)
+
+        # gazes_fused_noop = fuse_gazes_noop(images_,
+        #                                    gazes,
+        #                                    actions_,
+        #                                    gaze_count=1,
+        #                                    fuse_type='stack',
+        #                                    fuse_val=0)
         gazes = torch.stack(
             [reduce_gaze_stack(gaze_stack) for gaze_stack in gazes])
 
@@ -157,11 +157,13 @@ def create_processed_data(stack=1,
                              data=gazes,
                              compression=config['HDF_CMP_TYPE'],
                              compression_opts=config['HDF_CMP_LEVEL'])
-        group.create_dataset('gazes_fused_noop',
-                             data=gazes_fused_noop,
-                             compression=config['HDF_CMP_TYPE'],
-                             compression_opts=config['HDF_CMP_LEVEL'])
-        del gazes, images_, actions_, gazes_fused_noop
+
+        # group.create_dataset('gazes_fused_noop',
+        #                      data=gazes_fused_noop,
+        #                      compression=config['HDF_CMP_TYPE'],
+        #                      compression_opts=config['HDF_CMP_LEVEL'])
+        
+        del gazes, images_, actions_#, gazes_fused_noop
 
     gaze_h5_file.close()
 
@@ -217,10 +219,11 @@ def combine_processed_data(game):
 if __name__ == "__main__":
     import time
     for game in games:
-        # create_interim_files(game=game)
+        create_interim_files(game=game)
         create_processed_data(stack=STACK_SIZE,
                               game=game,
                               till_ix=-1,
+                              stacking_skip=1,
                               data_types=[
                                   'frames', 'actions', 'gazes', 'fused_gazes',
                                   'gazes_fused_noop'

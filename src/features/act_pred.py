@@ -1,70 +1,74 @@
+from src.data.data_loaders import load_hdf_data
 import os
 import sys
 import torch
 from tqdm import tqdm
 from yaml import safe_load
 from src.models.action_sl import ACTION_SL
-from src.data.data_loaders import load_action_data
-
+from src.data.data_loaders import load_action_data, load_gaze_data
+from src.models.cnn_gaze import CNN_GAZE
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # pylint: disable=all
-from feat_utils import image_transforms, reduce_gaze_stack, draw_figs  # nopep8
+from feat_utils import image_transforms, reduce_gaze_stack, draw_figs, fuse_gazes, fuse_gazes_noop  # nopep8
 
 with open('src/config.yaml', 'r') as f:
     config_data = safe_load(f.read())
 
-INFER = False
-game = 'breakout'
+MODE = 'train'
+BATCH_SIZE = config_data['BATCH_SIZE']
+# GAZE_TYPE = ["PRED","REAL"]
+GAZE_TYPE = "PRED"
 
-# VALID_ACTIONS = config_data['VALID_ACTIONS'][game]
-# num_actions = len(VALID_ACTIONS)
+game = 'phoenix'
+dataset_train = ['combined']
+dataset_val = ['540_RZ_4425986_Jul-29-13-47-10']
+
 device = torch.device('cuda')
 
-action_net = ACTION_SL().to(device=device)
+data_types = ['images', 'actions', 'gazes']
 
-optimizer = torch.optim.Adadelta(action_net.parameters(), lr=1.0, rho=0.95)
+action_net = ACTION_SL(game=game,
+                             data_types=data_types,
+                             dataset_train=dataset_train,
+                             dataset_train_load_type='chunked',
+                             dataset_val=dataset_val,
+                             dataset_val_load_type='chunked',
+                             device=device,
+                             mode=MODE).to(device=device)
 
+
+
+optimizer = torch.optim.Adadelta(action_net.parameters(), lr=1.0, rho=0.9)
 # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
 #     optimizer, lr_lambda=lambda x: x*0.95)
-
 lr_scheduler = None
-loss_ = torch.nn.CrossEntropyLoss()
+loss_ = torch.nn.CrossEntropyLoss().to(device=device)
 
-# single game run data load, default loads only 10 data points
-images, actions = load_action_data(stack=4,
-                                   till_ix=-1,
-                                   game_run='527_RZ_4153166_Jul-26-10-00-12')
-assert len(images) == len(actions)
+# action_net.load_model_fn(19)
+# optimizer.load_state_dict()
 
-transforms_ = image_transforms(image_size=(84, 84))
+if MODE == 'eval':
+        curr_group_data = load_hdf_data(game=game,
+                                        dataset=dataset_val,
+                                        data_types=['images','actions'],
+                                        )
+    
+        x, y = curr_group_data.values()
+        x = x[0]
+        y = y[0]
 
-# image crop and other transforms
-images_ = [
-    torch.stack([transforms_(image_).squeeze() for image_ in image_stack])
-    for image_stack in images
-]
-# import numpy as np
-# from collections import Counter
-# print(Counter(np.array(actions).flatten()))
-actions_ = [action_stack[-1] for action_stack in actions]
-# print(Counter(np.array(actions_).flatten()))
-# actions_ = [np.max(action_stack) for action_stack in actions]
-# print(Counter(np.array(actions_).flatten()))
+        image_ = x[204]
+        image_ = torch.Tensor(image_).to(device=device).unsqueeze(0)
+        action =  y[205]
 
-assert len(images_) == len(actions_)
+        acts = action_net.infer(image_)
+        acts = acts#.data.item()
 
-x_variable = torch.stack(images_).to(device=device)
-y_variable = torch.LongTensor(actions_).to(device=device)
-batch_size = min(32, x_variable.shape[0])
+    
 
-if INFER:
-    test_ix = 0
-    image_ = images[test_ix]
-    action_ = actions_[test_ix]
-    for cpt in tqdm(range(700, 800, 100)):
-        action_pred = action_net.infer(cpt, x_variable[test_ix].unsqueeze(0))
-        print(action_, action_pred)
 else:
-    action_net.train_loop(optimizer, lr_scheduler, loss_, x_variable,
-                          y_variable, batch_size)
+    action_net.train_loop(optimizer,
+                              lr_scheduler,
+                              loss_,
+                              batch_size=BATCH_SIZE)

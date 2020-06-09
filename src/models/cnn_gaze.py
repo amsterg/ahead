@@ -164,7 +164,7 @@ class CNN_GAZE(nn.Module):
             self.epoch = model_pickle['epoch']
             loss_val = model_pickle['loss']
         eix = 0
-        for epoch in range(self.epoch, 30):
+        for epoch in range(self.epoch, 15):
             for i, data in enumerate(self.train_data_iter):
                 x, y = self.get_data(data)
 
@@ -179,6 +179,7 @@ class CNN_GAZE(nn.Module):
                 #                        (epoch + 1) * i)
                 self.writer.add_scalar('Loss', loss.data.item(), eix)
                 eix+=1
+
             if epoch % 1 == 0:
                 # self.writer.add_histogram('smax', smax_pi[0])
                 # self.writer.add_histogram('target', y)
@@ -191,9 +192,11 @@ class CNN_GAZE(nn.Module):
                     }, self.model_save_string.format(epoch))
             print("Epoch ", epoch, "loss", loss)
             self.writer.add_scalar('Epoch Loss', loss.data.item(), epoch)
+            self.writer.add_scalar('Learning Rate', lr_scheduler.get_lr()[0], epoch)
             # self.writer.add_scalar('Epoch Val Loss',
             #                        self.val_loss().data.item(), epoch)
-
+            if epoch %2 ==0 :
+                lr_scheduler.step()
     def get_data(self, data):
         if isinstance(data, dict):
             x = data['images']
