@@ -30,7 +30,7 @@ def gaze_clusters(gaze_data, num_clusters=NUM_CLUSTERS):
     return kmeans.cluster_centers_
 
 
-def gaze_pdf(gaze, gaze_count=-1):
+def gaze_pdf(gaze, gaze_count=1):
     pdfs_true = []
     gaze_range = [84, 84]  # w,h
     # gaze_range = [160.0, 210.0]  # w,h
@@ -82,7 +82,7 @@ def fuse_gazes(images_, gazes, gaze_count=-1):
             torch.Tensor(gaze_pdf(gaze_, gaze_count)) for gaze_ in gaze_stack
         ]) for gaze_stack in gazes
     ]
-    fused = torch.stack(images_) * torch.stack(gazes_)
+    fused = images_ * torch.stack(gazes_)
     # print(fused.shape)
     # for img in images_[0]:
     #     plt.imshow(img)
@@ -158,7 +158,8 @@ def fuse_gazes_noop(images_,
     elif fuse_val == 0:
         gazes_ = torch.stack([
             torch.stack([
-                torch.zeros((84, 84)) if torch.sum(g) == 0 else g for g in gst
+                torch.zeros((84, 84)).to(
+                    device=torch.device('cuda')) if torch.sum(g) == 0 else g for g in gst
             ]) for gst in gazes_
         ])
     else:

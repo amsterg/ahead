@@ -89,3 +89,14 @@ target/
 # Mypy cache
 .mypy_cache/
 
+<<<<<<< HEAD
+=======
+#trained models
+models_*/
+models_/
+
+#tensorboard summaries
+runs*/
+runs_old/
+out*
+>>>>>>> 9a5e916dd12ba32800b90851562bca5c462b497e
